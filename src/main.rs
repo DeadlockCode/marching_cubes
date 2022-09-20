@@ -1,11 +1,13 @@
 use bevy::{prelude::*, input::mouse::MouseMotion, render::settings::{WgpuSettings, WgpuFeatures}, pbr::wireframe::{WireframePlugin, WireframeConfig}};
 use bevy_inspector_egui::WorldInspectorPlugin;
 
+use noise::{Fbm, NoiseFn};
+
 pub const WIDTH: f32 = 1280.0;
 pub const HEIGHT: f32 = 720.0;
 
 pub const MOVE_SPEED: f32 = 3.0;
-pub const SENSITIVITY: f32 = 2.0;
+pub const SENSITIVITY: f32 = 1.0;
 
 fn main() {
     App::new()
@@ -88,6 +90,12 @@ fn cube_to_sphere(v: Vec3) -> Vec3 {
     )
 }
 
+fn sphere_to_planet(v: Vec3) -> Vec3 {
+    let fbm = Fbm::new();
+    let val = fbm.get([v.x as f64, v.y as f64, v.z as f64]) as f32;
+    v + v * (val * 0.5 - 0.05).max(0.0)
+}
+
 fn generate_cube_face(resolution: usize, local_y: Vec3) -> Mesh {
     let local_x = Vec3::new(local_y.y, local_y.z, local_y.x);
     let local_z = local_y.cross(local_x);
@@ -108,19 +116,37 @@ fn generate_cube_face(resolution: usize, local_y: Vec3) -> Mesh {
             let percent = Vec2::new(x as f32, y as f32) / (resolution - 1) as f32;
             let cube = local_y + local_x * (percent.x * 2.0 - 1.0) + local_z * (percent.y * 2.0 - 1.0);
             let sphere = cube_to_sphere(cube);
-            positions[idx] = sphere.normalize().into(); // might be an issue
-            normals[idx] = sphere.normalize().into();
+            positions[idx] = sphere_to_planet(sphere).into();
 
             if x != resolution - 1 && y != resolution - 1 {
                 let idx_2 = (x + y * (resolution - 1)) * 6;
                 indices[  idx_2  ] = (idx                 ) as u32;
                 indices[idx_2 + 1] = (idx + resolution + 1) as u32;
-                indices[idx_2 + 2] = (idx + resolution    ) as u32; // might be an issue
+                indices[idx_2 + 2] = (idx + resolution    ) as u32;
                 indices[idx_2 + 3] = (idx                 ) as u32;
                 indices[idx_2 + 4] = (idx              + 1) as u32;
                 indices[idx_2 + 5] = (idx + resolution + 1) as u32;
             }
         }
+    }
+    
+    for i in 0..(indices.len() / 3) {
+        let v1: Vec3 = positions[indices[i * 3 + 0] as usize].into();
+        let v2: Vec3 = positions[indices[i * 3 + 1] as usize].into();
+        let v3: Vec3 = positions[indices[i * 3 + 2] as usize].into();
+    
+        let prev1: Vec3 = normals[indices[i * 3 + 0] as usize].into();
+        let prev2: Vec3 = normals[indices[i * 3 + 1] as usize].into();
+        let prev3: Vec3 = normals[indices[i * 3 + 2] as usize].into();
+    
+        normals[indices[i * 3 + 0] as usize] = (prev1 + (v2 - v1).cross(v3 - v1)).into();
+        normals[indices[i * 3 + 1] as usize] = (prev2 + (v2 - v1).cross(v3 - v1)).into();
+        normals[indices[i * 3 + 2] as usize] = (prev3 + (v2 - v1).cross(v3 - v1)).into();
+    }
+    
+    for i in 0..normals.len() {
+        let normal: Vec3 = normals[i].into();
+        normals[i] = normal.normalize().into();
     }
 
     let mut mesh = Mesh::new(bevy::render::render_resource::PrimitiveTopology::TriangleList);
@@ -138,7 +164,7 @@ fn spawn_scene(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    wireframe_config.global = true;
+    wireframe_config.global = false;
 
     let dirs = [
         Vec3::X,
@@ -155,7 +181,7 @@ fn spawn_scene(
     .with_children(|parent| {
         for i in 0..6 {
             parent.spawn_bundle(PbrBundle {
-                mesh: meshes.add(generate_cube_face(64, dirs[i])),
+                mesh: meshes.add(generate_cube_face(32, dirs[i])),
                 material: materials.add(Color::rgb(0.3, 0.5, 0.3).into()),
                 ..Default::default()
             });
