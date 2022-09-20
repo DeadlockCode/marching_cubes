@@ -90,10 +90,10 @@ fn cube_to_sphere(v: Vec3) -> Vec3 {
     )
 }
 
-fn sphere_to_planet(v: Vec3) -> Vec3 {
+fn sphere_to_height(v: Vec3) -> f32 {
     let fbm = Fbm::new();
     let val = fbm.get([v.x as f64, v.y as f64, v.z as f64]) as f32;
-    v + v * (val * 0.5 - 0.05).max(0.0)
+    (val * 0.5 + 0.95).max(1.0)
 }
 
 fn generate_cube_face(resolution: usize, local_y: Vec3) -> Mesh {
@@ -104,8 +104,8 @@ fn generate_cube_face(resolution: usize, local_y: Vec3) -> Mesh {
     positions.resize(resolution * resolution, [0.0, 0.0, 0.0]);
     let mut normals = Vec::new();
     normals.resize(resolution * resolution, [0.0, 0.0, 0.0]);
-    let mut uvs = Vec::new();
-    uvs.resize(resolution * resolution, [0.0, 0.0]);
+    let mut colors = Vec::new();
+    colors.resize(resolution * resolution, [0.0, 0.0, 0.0, 0.0]);
 
     let mut indices = Vec::new();
     indices.resize((resolution - 1) * (resolution - 1) * 6, 0 as u32);
@@ -116,11 +116,13 @@ fn generate_cube_face(resolution: usize, local_y: Vec3) -> Mesh {
             let percent = Vec2::new(x as f32, y as f32) / (resolution - 1) as f32;
             let cube = local_y + local_x * (percent.x * 2.0 - 1.0) + local_z * (percent.y * 2.0 - 1.0);
             let sphere = cube_to_sphere(cube);
-            positions[idx] = sphere_to_planet(sphere).into();
+            let height = sphere_to_height(sphere);
+            positions[idx] = (sphere * height).into();
+            colors[idx] = [height, height, height, height];
 
             if x != resolution - 1 && y != resolution - 1 {
                 let idx_2 = (x + y * (resolution - 1)) * 6;
-                indices[  idx_2  ] = (idx                 ) as u32;
+                indices[idx_2 + 0] = (idx                 ) as u32;
                 indices[idx_2 + 1] = (idx + resolution + 1) as u32;
                 indices[idx_2 + 2] = (idx + resolution    ) as u32;
                 indices[idx_2 + 3] = (idx                 ) as u32;
@@ -153,7 +155,7 @@ fn generate_cube_face(resolution: usize, local_y: Vec3) -> Mesh {
     mesh.set_indices(Some(bevy::render::mesh::Indices::U32(indices)));
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
-    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, colors);
 
     mesh
 }
