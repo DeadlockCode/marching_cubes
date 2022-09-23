@@ -72,11 +72,8 @@ fn update_camera(
         }
 
         for ev in motion_evr.iter() {
-            let x = camera.local_x();
-            let y = Vec3::new(0.0, 1.0, 0.0);
-
-            camera.rotate_axis(x, -ev.delta.y * delta * SENSITIVITY);
-            camera.rotate_axis(y, -ev.delta.x * delta * SENSITIVITY);
+            camera.rotate_local_axis(Vec3::X, -ev.delta.y * delta * SENSITIVITY);
+            camera.rotate_axis(Vec3::Y, -ev.delta.x * delta * SENSITIVITY);
         }
     }
 }

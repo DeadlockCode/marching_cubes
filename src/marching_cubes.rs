@@ -1,27 +1,28 @@
 mod march_tables;
 
 use bevy::{prelude::*, pbr::wireframe::WireframeConfig};
+use noise::{Fbm, NoiseFn};
 
 fn index(x: usize, y: usize, z: usize, resolution: usize) -> usize {
-    x + (y + z * resolution) * resolution
+    x + y * resolution + z * resolution * resolution
 }
 
 fn generate_mesh() -> Mesh {
-    const RESOLUTION: usize = 64;
+    const RESOLUTION: usize = 16;
 
-    let mut points = [0.0_f32; (RESOLUTION + 1) * (RESOLUTION + 1) * (RESOLUTION + 1)];
+    let mut points = [0_u8; (RESOLUTION + 1) * (RESOLUTION + 1) * (RESOLUTION + 1)];
 
-    let step = 1.0 / (RESOLUTION + 1) as f32;
+    let step = 1.0 / (RESOLUTION) as f32;
 
-    let floor = 0.05;
+    let floor = 64;
     
-
+    let fbm = Fbm::new();
     for z in 0..(RESOLUTION + 1) {
         for y in 0..(RESOLUTION + 1) {
             for x in 0..(RESOLUTION + 1) {
                 let idx = index(x, y, z, RESOLUTION + 1);
-                let pos = Vec3::new(x as f32 * step - 0.5, y as f32 * step - 0.5, z as f32 * step - 0.5);
-                points[idx] = pos.length_squared();
+                let step64 = step as f64;
+                points[idx] = (fbm.get([x as f64 * step64, y as f64 * step64, z as f64 * step64]) * 200.0) as u8;
             }
         }
     }
@@ -51,25 +52,25 @@ fn generate_mesh() -> Mesh {
                     let pos_a: Vec3 = Vec3::new(x as f32, y as f32, z as f32) + march_tables::point_offsets[march_tables::corner_index_a_from_edge[edge_index as usize]];
                     let pos_b: Vec3 = Vec3::new(x as f32, y as f32, z as f32) + march_tables::point_offsets[march_tables::corner_index_b_from_edge[edge_index as usize]];
 
-                    let val_a: f32 = points[index(pos_a.x as usize, pos_a.y as usize, pos_a.z as usize, RESOLUTION)];
-                    let val_b: f32 = points[index(pos_b.x as usize, pos_b.y as usize, pos_b.z as usize, RESOLUTION)];
+                    let val_a = points[index(pos_a.x as usize, pos_a.y as usize, pos_a.z as usize, RESOLUTION)] as f32;
+                    let val_b = points[index(pos_b.x as usize, pos_b.y as usize, pos_b.z as usize, RESOLUTION)] as f32;
 
-                    let s = (floor - val_b) / (val_a - val_b);
+                    let t = (floor as f32 - val_b) / (val_a - val_b);
 
-                    let position = pos_b.lerp(pos_a, s);
+                    let position = pos_b + (pos_a - pos_b) * t;
 
                     let mut make_vertex = true;
 
                     //for i in 0..positions.len() {
                     //    let other: Vec3 = positions[i].into();
-                    //    if other == (position * step - Vec3::ONE * 0.5) {
+                    //    if other == (position * step) {
                     //        indices.push(i as u32);
                     //        make_vertex = false;
                     //    }
                     //}
                     
                     if make_vertex {
-                        positions.push((position * step - Vec3::ONE * 0.5).into());
+                        positions.push((position * step).into());
                     
                         indices.push(current_index);
                         current_index += 1;
