@@ -1,13 +1,10 @@
 mod cube_sphere;
 mod dual_contouring;
 mod marching_cubes;
-use cube_sphere::spawn_cube_sphere;
-
-use bevy::{prelude::*, input::mouse::MouseMotion, render::settings::{WgpuSettings, WgpuFeatures}, pbr::wireframe::{WireframePlugin}};
+use bevy::{prelude::*, input::mouse::MouseMotion, render::settings::{WgpuSettings, WgpuFeatures}, pbr::wireframe::WireframePlugin};
 use bevy_inspector_egui::WorldInspectorPlugin;
 
 use marching_cubes::spawn_marching_cubed_surface;
-use noise::{Fbm, NoiseFn};
 
 pub const WIDTH: f32 = 1280.0;
 pub const HEIGHT: f32 = 720.0;
@@ -80,8 +77,8 @@ fn update_camera(
 
 fn spawn_camera(mut commands: Commands) {
     commands.spawn_bundle(Camera3dBundle {
-        transform: Transform::from_xyz(-2.0, 2.5, 5.0).looking_at(Vec3::new(0.0, 0.0, 0.0), Vec3::Y),
-        ..default()
+        transform: Transform::from_xyz(-2.0, 2.5, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
+        ..Default::default()
     })
     .insert(Name::new("Camera"));
 }
@@ -89,14 +86,14 @@ fn spawn_camera(mut commands: Commands) {
 fn spawn_light(
     mut commands: Commands,
 ) {
-    commands.spawn_bundle(PointLightBundle {
-        point_light: PointLight {
-            intensity: 1500.0,
+    commands.spawn_bundle(DirectionalLightBundle {
+        directional_light: DirectionalLight {
             shadows_enabled: true,
-            ..default()
+            illuminance: 40000.0,
+            ..Default::default()
         },
-        transform: Transform::from_xyz(4.0, 8.0, 4.0),
-        ..default()
+        transform: Transform::from_rotation(Quat::from_euler(EulerRot::ZYX, 2.0, 2.0, 0.0)),
+        ..Default::default()
     })
     .insert(Name::new("Light"));
 }

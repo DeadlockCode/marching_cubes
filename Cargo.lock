@@ -2158,6 +2158,7 @@ dependencies = [
  "bevy",
  "bevy-inspector-egui",
  "noise",
+ "progressing",
 ]
 
 [[package]]
@@ -2777,6 +2778,15 @@ name = "profiling"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2f61dcf0b917cd75d4521d7343d1ffff3d1583054133c9b5cbea3375c703c40d"
+
+[[package]]
+name = "progressing"
+version = "3.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "97b7db19a74ba7c34de36558abed080568491d2b8999a34de914b1793b0b4b1b"
+dependencies = [
+ "log",
+]
 
 [[package]]
 name = "quote"

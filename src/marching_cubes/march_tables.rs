@@ -1,6 +1,6 @@
 use bevy::prelude::Vec3;
 
-pub static edges: [i32; 256] = [
+pub static EDGES: [i32; 256] = [
     0x0,
     0x109,
     0x203,
@@ -259,7 +259,7 @@ pub static edges: [i32; 256] = [
     0x0
 ];
 
-pub static triangulations: [[i32; 16]; 256] = [
+pub static TRIANGULATIONS: [[i32; 16]; 256] = [
     [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 ],
     [ 0, 8, 3, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 ],
     [ 0, 1, 9, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 ],
@@ -518,7 +518,7 @@ pub static triangulations: [[i32; 16]; 256] = [
     [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 ]
 ];
 
-pub static corner_index_a_from_edge: [usize; 12] = [
+pub static CORNER_INDEX_A_FROM_EDGE: [usize; 12] = [
     0,
     1,
     2,
@@ -533,7 +533,7 @@ pub static corner_index_a_from_edge: [usize; 12] = [
     3
 ];
 
-pub static corner_index_b_from_edge: [usize; 12] = [
+pub static CORNER_INDEX_B_FROM_EDGE: [usize; 12] = [
     1,
     2,
     3,
@@ -548,7 +548,7 @@ pub static corner_index_b_from_edge: [usize; 12] = [
     7
 ];
 
-pub static point_offsets: [Vec3; 8] = [
+pub static POINT_OFFSETS: [Vec3; 8] = [
     Vec3::new(0.0, 0.0, 0.0),
     Vec3::new(0.0, 0.0, 1.0),
     Vec3::new(1.0, 0.0, 1.0),
