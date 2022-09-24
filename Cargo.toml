@@ -15,3 +15,5 @@ opt-level = 3
 bevy = "0.8.1"
 bevy-inspector-egui = "0.12.1"
 noise = "0.7.0"
+
+progressing = "3.0.2"
