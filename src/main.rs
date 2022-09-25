@@ -1,7 +1,6 @@
-mod cube_sphere;
-mod dual_contouring;
 mod marching_cubes;
-use bevy::{prelude::*, input::mouse::MouseMotion, render::settings::{WgpuSettings, WgpuFeatures}, pbr::wireframe::WireframePlugin};
+
+use bevy::{prelude::*, input::mouse::MouseMotion, render::settings::{WgpuSettings, WgpuFeatures}, pbr::wireframe::WireframePlugin, window::WindowFocused};
 use bevy_inspector_egui::WorldInspectorPlugin;
 
 use marching_cubes::spawn_marching_cubed_surface;
@@ -9,7 +8,7 @@ use marching_cubes::spawn_marching_cubed_surface;
 pub const WIDTH: f32 = 1280.0;
 pub const HEIGHT: f32 = 720.0;
 
-pub const MOVE_SPEED: f32 = 3.0;
+pub const MOVE_SPEED: f32 = 30.0;
 pub const SENSITIVITY: f32 = 1.0;
 
 fn main() {
@@ -38,6 +37,7 @@ fn main() {
 
 fn update_camera(
     keys: Res<Input<KeyCode>>,
+    buttons: Res<Input<MouseButton>>,
     mut motion_evr: EventReader<MouseMotion>,
     mut cameras: Query<(&mut Transform, &Camera3d)>,
     time: Res<Time>,
@@ -67,10 +67,11 @@ fn update_camera(
             let dir = camera.right();
             camera.translation += dir * delta * MOVE_SPEED;
         }
-
-        for ev in motion_evr.iter() {
-            camera.rotate_local_axis(Vec3::X, -ev.delta.y * delta * SENSITIVITY);
-            camera.rotate_axis(Vec3::Y, -ev.delta.x * delta * SENSITIVITY);
+        if buttons.pressed(MouseButton::Left) {
+            for ev in motion_evr.iter() {
+                camera.rotate_local_axis(Vec3::X, -ev.delta.y * delta * SENSITIVITY);
+                camera.rotate_axis(Vec3::Y, -ev.delta.x * delta * SENSITIVITY);
+            }
         }
     }
 }
