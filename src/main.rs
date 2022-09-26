@@ -1,10 +1,8 @@
 mod marching_cubes;
 mod surface_nets;
 
-use bevy::{prelude::*, input::mouse::MouseMotion, render::settings::{WgpuSettings, WgpuFeatures}, pbr::wireframe::WireframePlugin, window::WindowFocused};
+use bevy::{prelude::*, input::mouse::MouseMotion, render::{settings::{WgpuSettings, WgpuFeatures}, mesh::Indices}, pbr::wireframe::{WireframePlugin, WireframeConfig}};
 use bevy_inspector_egui::WorldInspectorPlugin;
-
-use marching_cubes::spawn_marching_cubed_surface;
 
 pub const WIDTH: f32 = 1280.0;
 pub const HEIGHT: f32 = 720.0;
@@ -31,7 +29,8 @@ fn main() {
         .add_plugin(WorldInspectorPlugin::new())
         .add_plugin(WireframePlugin)
         .add_startup_system(spawn_camera)
-        .add_startup_system(spawn_marching_cubed_surface)
+        .add_startup_system(spawn_thing)
+        .add_startup_system(spawn_other_thing)
         .add_startup_system(spawn_light)
         .add_system(update_camera)
         .run();
@@ -76,6 +75,62 @@ fn update_camera(
             }
         }
     }
+}
+
+const RESOLUTION: usize = 32;
+
+fn implicit_function(i: f32, j: f32, k: f32) -> f32 {
+    let res = RESOLUTION as f32 * 0.5;
+    let mul = 3.6 / res;
+
+    let (x, y, z) = ((i - res) * mul, (j - res) * mul, (k - res) * mul);
+
+    (x-2.0)*(x-2.0)*(x+2.0)*(x+2.0) + (y-2.0)*(y-2.0)*(y+2.0)*(y+2.0) + (z-2.0)*(z-2.0)*(z+2.0)*(z+2.0) + 3.0*(x*x*y*y+x*x*z*z+y*y*z*z) + 6.0*x*y*z - 10.0*(x*x+y*y+z*z) + 22.0
+}
+
+fn spawn_thing(
+    mut commands: Commands,
+    mut wireframe_config: ResMut<WireframeConfig>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    wireframe_config.global = true;
+
+    let (positions, normals, indices) = surface_nets::surface_net(RESOLUTION, &implicit_function);
+
+    let mut mesh = Mesh::new(bevy::render::render_resource::PrimitiveTopology::TriangleList);
+    mesh.set_indices(Some(Indices::U32(indices)));
+    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+
+    commands.spawn_bundle(PbrBundle {
+        mesh: meshes.add(mesh),
+        material: materials.add(Color::rgb(0.4, 0.7, 1.0).into()),
+        transform: Transform::from_translation(Vec3::new(-(RESOLUTION as f32), 0.0, 0.0)),
+        ..Default::default()
+    });
+}
+
+pub fn spawn_other_thing(
+    mut commands: Commands,
+    mut wireframe_config: ResMut<WireframeConfig>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    wireframe_config.global = true;
+
+    let (positions, normals, indices) = marching_cubes::marching_cubes(RESOLUTION, &implicit_function);
+
+    let mut mesh = Mesh::new(bevy::render::render_resource::PrimitiveTopology::TriangleList);
+    mesh.set_indices(Some(Indices::U32(indices)));
+    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+
+    commands.spawn_bundle(PbrBundle {
+        mesh: meshes.add(mesh),
+        material: materials.add(Color::rgb(0.4, 0.7, 1.0).into()),
+        ..Default::default()
+    });
 }
 
 fn spawn_camera(mut commands: Commands) {

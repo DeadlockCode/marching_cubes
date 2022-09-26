@@ -1,50 +1,39 @@
 mod march_tables;
 
-use bevy::{prelude::*, pbr::wireframe::WireframeConfig};
+use bevy::prelude::*;
 
 fn index(x: usize, y: usize, z: usize, resolution: usize) -> usize {
     x + y * resolution + z * resolution * resolution
 }
 
-fn implicit_function(x: f32, y: f32, z: f32) -> f32 {
-    (x-2.0)*(x-2.0)*(x+2.0)*(x+2.0) + (y-2.0)*(y-2.0)*(y+2.0)*(y+2.0) + (z-2.0)*(z-2.0)*(z+2.0)*(z+2.0) + 3.0*(x*x*y*y+x*x*z*z+y*y*z*z) + 6.0*x*y*z - 10.0*(x*x+y*y+z*z) + 22.0
-}
+pub type SDF = dyn Fn(f32, f32, f32) -> f32;
 
-fn generate_mesh(origin: Vec3) -> Mesh {
-    const RESOLUTION: usize = 15;
-
-    let mut points = Box::new([0.0f32; (RESOLUTION + 1) * (RESOLUTION + 1) * (RESOLUTION + 1)]);
-
-    let step = 1.0 / RESOLUTION as f32;
-
-    //let fbm = Fbm::new();
-    for z in 0..(RESOLUTION + 1) {
-        for y in 0..(RESOLUTION + 1) {
-            for x in 0..(RESOLUTION + 1) {
-                let idx = index(x, y, z, RESOLUTION + 1);
-                points[idx] = implicit_function(x as f32 * step + origin.x, y as f32 * step + origin.y, z as f32 * step + origin.z);
-                
-                //((y as f64 * step as f64 + origin.y as f64) * 255.0 - fbm.get([x as f64 * step as f64 + origin.x as f64, z as f64 * step as f64 + origin.z as f64]) * 128.0).clamp(0.0, 255.0) as u8;
-            }
-        }
-    }
+pub fn marching_cubes(
+    resolution: usize,
+    signed_distance_field: &SDF,
+) -> (Vec<[f32; 3]>, Vec<[f32; 3]>, Vec<u32>) {
+    let points = coords(resolution + 1)
+        .map(|(x, y, z)| signed_distance_field(x as f32, y as f32, z as f32))
+        .collect::<Vec<_>>();
 
     let mut positions = Vec::<[f32; 3]>::new();
+    let mut indices = Vec::<u32>::new();
 
-    for z in 0..RESOLUTION {
-        for y in 0..RESOLUTION {
-            for x in 0..RESOLUTION {
+    let mut vertex_amt = 0;
+    for z in 0..resolution {
+        for y in 0..resolution {
+            for x in 0..resolution {
                 
                 let mut triangulation_index = 0;
 
-                if points[index(  x  ,  y  ,  z  , RESOLUTION + 1)] > 0.0 { triangulation_index |= 1 << 0; };
-                if points[index(  x  ,  y  ,z + 1, RESOLUTION + 1)] > 0.0 { triangulation_index |= 1 << 1; };
-                if points[index(x + 1,  y  ,z + 1, RESOLUTION + 1)] > 0.0 { triangulation_index |= 1 << 2; };
-                if points[index(x + 1,  y  ,  z  , RESOLUTION + 1)] > 0.0 { triangulation_index |= 1 << 3; };
-                if points[index(  x  ,y + 1,  z  , RESOLUTION + 1)] > 0.0 { triangulation_index |= 1 << 4; };
-                if points[index(  x  ,y + 1,z + 1, RESOLUTION + 1)] > 0.0 { triangulation_index |= 1 << 5; };
-                if points[index(x + 1,y + 1,z + 1, RESOLUTION + 1)] > 0.0 { triangulation_index |= 1 << 6; };
-                if points[index(x + 1,y + 1,  z  , RESOLUTION + 1)] > 0.0 { triangulation_index |= 1 << 7; };
+                if points[index(  x  ,  y  ,  z  , resolution + 1)] > 0.0 { triangulation_index |= 1 << 0; };
+                if points[index(  x  ,  y  ,z + 1, resolution + 1)] > 0.0 { triangulation_index |= 1 << 1; };
+                if points[index(x + 1,  y  ,z + 1, resolution + 1)] > 0.0 { triangulation_index |= 1 << 2; };
+                if points[index(x + 1,  y  ,  z  , resolution + 1)] > 0.0 { triangulation_index |= 1 << 3; };
+                if points[index(  x  ,y + 1,  z  , resolution + 1)] > 0.0 { triangulation_index |= 1 << 4; };
+                if points[index(  x  ,y + 1,z + 1, resolution + 1)] > 0.0 { triangulation_index |= 1 << 5; };
+                if points[index(x + 1,y + 1,z + 1, resolution + 1)] > 0.0 { triangulation_index |= 1 << 6; };
+                if points[index(x + 1,y + 1,  z  , resolution + 1)] > 0.0 { triangulation_index |= 1 << 7; };
                 
                 let triangulation = march_tables::TRIANGULATIONS[triangulation_index];
 
@@ -54,55 +43,60 @@ fn generate_mesh(origin: Vec3) -> Mesh {
                     let pos_a: Vec3 = Vec3::new(x as f32, y as f32, z as f32) + march_tables::POINT_OFFSETS[march_tables::CORNER_INDEX_A_FROM_EDGE[edge_index as usize]];
                     let pos_b: Vec3 = Vec3::new(x as f32, y as f32, z as f32) + march_tables::POINT_OFFSETS[march_tables::CORNER_INDEX_B_FROM_EDGE[edge_index as usize]];
 
-                    let val_a = points[index(pos_a.x as usize, pos_a.y as usize, pos_a.z as usize, RESOLUTION + 1)] as f32;
-                    let val_b = points[index(pos_b.x as usize, pos_b.y as usize, pos_b.z as usize, RESOLUTION + 1)] as f32;
+                    let val_a = points[index(pos_a.x as usize, pos_a.y as usize, pos_a.z as usize, resolution + 1)] as f32;
+                    let val_b = points[index(pos_b.x as usize, pos_b.y as usize, pos_b.z as usize, resolution + 1)] as f32;
 
                     let t = (-val_b) / (val_a - val_b);
 
                     let position = pos_b + (pos_a - pos_b) * t;
                     
-                    positions.push((position * step - Vec3::splat(0.5)).into());
+                    let mut make_vertex = true;
+
+                    for idx in 0..vertex_amt {
+                        let this: [f32; 3] = position.into(); 
+                        if positions[idx] == this {
+                            make_vertex = false;
+                            indices.push(idx as u32);
+                        }
+                    }
+
+                    if make_vertex {
+                        positions.push(position.into());
+                        indices.push(vertex_amt as u32);
+                        vertex_amt += 1;
+                    }
                 }
             }
         }
     }
 
-    let mut mesh = Mesh::new(bevy::render::render_resource::PrimitiveTopology::TriangleList);
-    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
-    mesh.compute_flat_normals();
+    let mut normals = vec![[0.0; 3]; positions.len()];
 
-    mesh
+    for idx in 0..indices.len()/3 {
+        let norm1: Vec3 = normals[indices[idx * 3 + 0] as usize].into();
+        let norm2: Vec3 = normals[indices[idx * 3 + 1] as usize].into();
+        let norm3: Vec3 = normals[indices[idx * 3 + 2] as usize].into();
+
+        let pos1: Vec3 = positions[indices[idx * 3 + 0] as usize].into();
+        let pos2: Vec3 = positions[indices[idx * 3 + 1] as usize].into();
+        let pos3: Vec3 = positions[indices[idx * 3 + 2] as usize].into();
+
+        let normal = Vec3::cross((pos2 - pos1).normalize(), (pos3 - pos1).normalize());
+
+        normals[indices[idx * 3 + 0] as usize] = (norm1 + normal).into();
+        normals[indices[idx * 3 + 1] as usize] = (norm2 + normal).into();
+        normals[indices[idx * 3 + 2] as usize] = (norm3 + normal).into();
+    }
+
+    for idx in 0..normals.len() {
+        normals[idx] = Into::<Vec3>::into(normals[idx]).normalize().into();
+    }
+
+    (positions, normals, indices)
 }
 
-pub fn spawn_marching_cubed_surface(
-    mut commands: Commands,
-    mut wireframe_config: ResMut<WireframeConfig>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
-    wireframe_config.global = true;
-
-    const RESOLUTION: i32 = 8;
-
-    let mut parent = commands.spawn_bundle(SpatialBundle {
-        transform: Transform::from_scale(Vec3::splat(32.0)),
-        ..Default::default()
-    });
-
-    let ofst = RESOLUTION as f32 / 2.0;
-
-    parent.with_children(|parent| {
-        for z in 0..RESOLUTION {
-            for y in 0..RESOLUTION {
-                for x in 0..RESOLUTION {
-                    parent.spawn_bundle(PbrBundle {
-                        mesh: meshes.add(generate_mesh(Vec3::new(x as f32 - ofst, y as f32 - ofst, z as f32 - ofst))),
-                        material: materials.add(Color::rgb(0.4, 0.7, 1.0).into()),
-                        transform: Transform::from_translation(Vec3::new(x as f32 - ofst, y as f32 - ofst, z as f32 - ofst)),
-                        ..Default::default()
-                    });
-                }
-            }
-        }
-    });
+fn coords(size: usize) -> impl Iterator<Item = (usize, usize, usize)> {
+    (0..size)
+        .flat_map(move |x| (0..size).map(move |y| (x, y)))
+        .flat_map(move |(x, y)| (0..size).map(move |z| (x, y, z)))
 }
