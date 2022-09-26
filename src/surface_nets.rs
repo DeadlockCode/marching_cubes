@@ -1,407 +1,317 @@
-use bevy::prelude::*;
+use bevy::utils::HashMap;
 
-use ndshape::Shape;
+// Positive is "air"
+// Negative is "solid"
 
-pub trait SignedDistance: Into<f32> + Copy {
-    fn is_negative(self) -> bool;
+pub type SDF = dyn Fn(f32, f32, f32) -> f32;
+type GridSDF = dyn Fn(usize, usize, usize) -> f32;
+
+pub fn surface_net(
+    resolution: usize,
+    signed_distance_field: &SDF,
+) -> (Vec<[f32; 3]>, Vec<[f32; 3]>, Vec<u32>) {
+    let axis_length = resolution + 1;
+    let arr = coords(axis_length)
+        .map(|(x, y, z)| signed_distance_field(x as f32, y as f32, z as f32))
+        .collect::<Vec<_>>();
+    surface_net_impl(resolution, &move |x, y, z| {
+        arr[z * axis_length * axis_length + y * axis_length + x]
+    })
 }
 
-impl SignedDistance for f32 {
-    fn is_negative(self) -> bool {
-        self < 0.0
+// Main algorithm driver.
+fn surface_net_impl(
+    resolution: usize,
+    grid_values: &GridSDF,
+) -> (Vec<[f32; 3]>, Vec<[f32; 3]>, Vec<u32>) {
+    let mut positions = Vec::new();
+    let mut normals = Vec::new();
+    let mut grid_to_index = HashMap::new();
+    // Find all vertex positions. Addtionally, create a hashmap from grid
+    // position to index (i.e. OpenGL vertex index).
+    for coords in coords(resolution) {
+        if let Some((center, normal)) = find_center(grid_values, coords) {
+            grid_to_index.insert(coords, positions.len());
+            positions.push(center);
+            normals.push(normal);
+        }
+    }
+    // Find all triangles, in the form of [index, index, index] triples.
+    let mut indicies = Vec::new();
+    make_all_triangles(
+        grid_values,
+        resolution,
+        &grid_to_index,
+        &positions,
+        &mut indicies,
+    );
+    (positions, normals, indicies)
+}
+
+// Iterator over all integer points in a 3d cube from 0 to size
+fn coords(size: usize) -> impl Iterator<Item = (usize, usize, usize)> {
+    (0..size)
+        .flat_map(move |x| (0..size).map(move |y| (x, y)))
+        .flat_map(move |(x, y)| (0..size).map(move |z| (x, y, z)))
+}
+
+// List of all edges in a cube.
+const OFFSETS: [(usize, usize); 12] = [
+    (0b000, 0b001), // ((0, 0, 0), (0, 0, 1)),
+    (0b000, 0b010), // ((0, 0, 0), (0, 1, 0)),
+    (0b000, 0b100), // ((0, 0, 0), (1, 0, 0)),
+    (0b001, 0b011), // ((0, 0, 1), (0, 1, 1)),
+    (0b001, 0b101), // ((0, 0, 1), (1, 0, 1)),
+    (0b010, 0b011), // ((0, 1, 0), (0, 1, 1)),
+    (0b010, 0b110), // ((0, 1, 0), (1, 1, 0)),
+    (0b011, 0b111), // ((0, 1, 1), (1, 1, 1)),
+    (0b100, 0b101), // ((1, 0, 0), (1, 0, 1)),
+    (0b100, 0b110), // ((1, 0, 0), (1, 1, 0)),
+    (0b101, 0b111), // ((1, 0, 1), (1, 1, 1)),
+    (0b110, 0b111), // ((1, 1, 0), (1, 1, 1)),
+];
+
+// Find the vertex position for this grid: it will be somewhere within the cube
+// with coordinates [0,1].
+// How? First, for each edge in the cube, find if that edge crosses the SDF
+// boundary - i.e. one point is positive, one point is negative.
+// Second, calculate the "weighted midpoint" between these points (see
+// find_edge).
+// Third, take the average of all these points for all edges (for edges that
+// have crossings).
+// There are more complicated and better algorithms than this, but this is
+// simple and easy to implement.
+// Returns: (pos, normal)
+fn find_center(
+    grid_values: &GridSDF,
+    coord: (usize, usize, usize),
+) -> Option<([f32; 3], [f32; 3])> {
+    let mut values = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+    for (x, value) in values.iter_mut().enumerate() {
+        *value = grid_values(
+            coord.0 + (x & 1),
+            coord.1 + ((x >> 1) & 1),
+            coord.2 + ((x >> 2) & 1),
+        );
+    }
+    let edges = OFFSETS.iter().filter_map(|&(offset1, offset2)| {
+        find_edge(offset1, offset2, values[offset1], values[offset2])
+    });
+    let mut count = 0;
+    let mut sum = [0.0, 0.0, 0.0];
+    for edge in edges {
+        count += 1;
+        sum[0] += edge[0];
+        sum[1] += edge[1];
+        sum[2] += edge[2];
+    }
+    if count == 0 {
+        None
+    } else {
+        let normal_x = (values[0b001] + values[0b011] + values[0b101] + values[0b111])
+            - (values[0b000] + values[0b010] + values[0b100] + values[0b110]);
+        let normal_y = (values[0b010] + values[0b011] + values[0b110] + values[0b111])
+            - (values[0b000] + values[0b001] + values[0b100] + values[0b101]);
+        let normal_z = (values[0b100] + values[0b101] + values[0b110] + values[0b111])
+            - (values[0b000] + values[0b001] + values[0b010] + values[0b011]);
+        let normal_len = (normal_x * normal_x + normal_y * normal_y + normal_z * normal_z).sqrt();
+        Some((
+            [
+                sum[0] / count as f32 + coord.0 as f32,
+                sum[1] / count as f32 + coord.1 as f32,
+                sum[2] / count as f32 + coord.2 as f32,
+            ],
+            [
+                normal_x / normal_len,
+                normal_y / normal_len,
+                normal_z / normal_len,
+            ],
+        ))
     }
 }
 
-#[derive(Default)]
-pub struct SurfaceNetsBuffer {
-    /// The triangle mesh positions.
-    ///
-    /// These are in array-local coordinates, i.e. at array position `(x, y, z)`, the vertex position would be `(x, y, z) +
-    /// centroid` if the isosurface intersects that voxel.
-    pub positions: Vec<[f32; 3]>,
-    /// The triangle mesh normals.
-    ///
-    /// The normals are **not** normalized, since that is done most efficiently on the GPU.
-    pub normals: Vec<[f32; 3]>,
-    /// The triangle mesh indices.
-    pub indices: Vec<u32>,
-
-    /// Local 3D array coordinates of every voxel that intersects the isosurface.
-    pub surface_points: Vec<[u32; 3]>,
-    /// Stride of every voxel that intersects the isosurface. Can be used for efficient post-processing.
-    pub surface_strides: Vec<u32>,
-    /// Used to map back from voxel stride to vertex index.
-    pub stride_to_index: Vec<u32>,
+// Given two points, A and B, find the point between them where the SDF is zero.
+// (This might not exist).
+// A and B are specified via A=coord+offset1 and B=coord+offset2, because code
+// is weird.
+fn find_edge(offset1: usize, offset2: usize, value1: f32, value2: f32) -> Option<[f32; 3]> {
+    if (value1 < 0.0) == (value2 < 0.0) {
+        return None;
+    }
+    let interp = value1 / (value1 - value2);
+    let point = [
+        (offset1 & 1) as f32 * (1.0 - interp) + (offset2 & 1) as f32 * interp,
+        ((offset1 >> 1) & 1) as f32 * (1.0 - interp) + ((offset2 >> 1) & 1) as f32 * interp,
+        ((offset1 >> 2) & 1) as f32 * (1.0 - interp) + ((offset2 >> 2) & 1) as f32 * interp,
+    ];
+    Some(point)
 }
 
-impl SurfaceNetsBuffer {
-    /// Clears all of the buffers, but keeps the memory allocated for reuse.
-    fn reset(&mut self, array_size: usize) {
-        self.positions.clear();
-        self.normals.clear();
-        self.indices.clear();
-        self.surface_points.clear();
-        self.surface_strides.clear();
-
-        // Just make sure this buffer is big enough, whether or not we've used it before.
-        self.stride_to_index.resize(array_size, NULL_VERTEX);
+// For every edge that crosses the boundary, make a quad between the
+// "centers" of the four cubes touching that boundary. (Well, really, two
+// triangles) The "centers" are actually the vertex positions, found earlier.
+// (Also, make sure the triangles are facing the right way)
+// There's some hellish off-by-one conditions and whatnot that make this code
+// really gross.
+fn make_all_triangles(
+    grid_values: &GridSDF,
+    resolution: usize,
+    grid_to_index: &HashMap<(usize, usize, usize), usize>,
+    positions: &[[f32; 3]],
+    indicies: &mut Vec<u32>,
+) {
+    for coord in coords(resolution) {
+        // TODO: Cache grid_values(coord), it's called three times here.
+        // Do edges parallel with the X axis
+        if coord.1 != 0 && coord.2 != 0 {
+            make_triangle(
+                grid_values,
+                grid_to_index,
+                positions,
+                indicies,
+                coord,
+                (1, 0, 0),
+                (0, 1, 0),
+                (0, 0, 1),
+            );
+        }
+        // Do edges parallel with the Y axis
+        if coord.0 != 0 && coord.2 != 0 {
+            make_triangle(
+                grid_values,
+                grid_to_index,
+                positions,
+                indicies,
+                coord,
+                (0, 1, 0),
+                (0, 0, 1),
+                (1, 0, 0),
+            );
+        }
+        // Do edges parallel with the Z axis
+        if coord.0 != 0 && coord.1 != 0 {
+            make_triangle(
+                grid_values,
+                grid_to_index,
+                positions,
+                indicies,
+                coord,
+                (0, 0, 1),
+                (1, 0, 0),
+                (0, 1, 0),
+            );
+        }
     }
 }
 
-/// This stride of the SDF array did not produce a vertex.
-pub const NULL_VERTEX: u32 = u32::MAX;
+fn make_triangle(
+    grid_values: &GridSDF,
+    grid_to_index: &HashMap<(usize, usize, usize), usize>,
+    positions: &[[f32; 3]],
+    indicies: &mut Vec<u32>,
+    coord: (usize, usize, usize),
+    offset: (usize, usize, usize),
+    axis1: (usize, usize, usize),
+    axis2: (usize, usize, usize),
+) {
+    let face_result = is_face(grid_values, coord, offset);
+    if let FaceResult::NoFace = face_result {
+        return;
+    }
+    // The triangle points, viewed face-front, look like this:
+    // v1 v3
+    // v2 v4
+    let v1 = *grid_to_index.get(&(coord.0, coord.1, coord.2)).unwrap();
+    let v2 = *grid_to_index
+        .get(&(coord.0 - axis1.0, coord.1 - axis1.1, coord.2 - axis1.2))
+        .unwrap();
+    let v3 = *grid_to_index
+        .get(&(coord.0 - axis2.0, coord.1 - axis2.1, coord.2 - axis2.2))
+        .unwrap();
+    let v4 = *grid_to_index
+        .get(&(
+            coord.0 - axis1.0 - axis2.0,
+            coord.1 - axis1.1 - axis2.1,
+            coord.2 - axis1.2 - axis2.2,
+        )).unwrap();
+    // optional addition to algorithm: split quad to triangles in a certain way
+    let p1 = positions[v1];
+    let p2 = positions[v2];
+    let p3 = positions[v3];
+    let p4 = positions[v4];
+    fn dist(a: [f32; 3], b: [f32; 3]) -> f32 {
+        let d = [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+        d[0] * d[0] + d[1] * d[1] + d[2] * d[2]
+    }
+    let d14 = dist(p1, p4);
+    let d23 = dist(p2, p3);
+    // Split the quad along the shorter axis, rather than the longer one.
+    if d14 < d23 {
+        match face_result {
+            FaceResult::NoFace => (),
+            FaceResult::FacePositive => {
+                indicies.push(v1 as u32);
+                indicies.push(v2 as u32);
+                indicies.push(v4 as u32);
 
-/// The Naive Surface Nets smooth voxel meshing algorithm.
-///
-/// Extracts an isosurface mesh from the [signed distance field](https://en.wikipedia.org/wiki/Signed_distance_function) `sdf`.
-/// Each value in the field determines how close that point is to the isosurface. Negative values are considered "interior" of
-/// the surface volume, and positive values are considered "exterior." These lattice points will be considered corners of unit
-/// cubes. For each unit cube, at most one isosurface vertex will be estimated, as below, where `p` is a positive corner value,
-/// `n` is a negative corner value, `s` is an isosurface vertex, and `|` or `-` are mesh polygons connecting the vertices.
-///
-/// ```text
-/// p   p   p   p
-///   s---s
-/// p | n | p   p
-///   s   s---s
-/// p | n   n | p
-///   s---s---s
-/// p   p   p   p
-/// ```
-///
-/// The set of corners sampled is exactly the set of points in `[min, max]`. `sdf` must contain all of those points.
-///
-/// Note that the scheme illustrated above implies that chunks must be padded with a 1-voxel border copied from neighboring
-/// voxels in order to connect seamlessly.
-pub fn surface_nets<T, S>(
-    sdf: &[T],
-    shape: &S,
-    min: [u32; 3],
-    max: [u32; 3],
-    output: &mut SurfaceNetsBuffer,
-) where
-    T: SignedDistance,
-    S: Shape<3, Coord = u32>,
-{
-    // SAFETY
-    // Make sure the slice matches the shape before we start using get_unchecked.
-    assert!(shape.linearize(min) <= shape.linearize(max));
-    assert!((shape.linearize(max) as usize) < sdf.len());
+                indicies.push(v1 as u32);
+                indicies.push(v4 as u32);
+                indicies.push(v3 as u32);
+            }
+            FaceResult::FaceNegative => {
+                indicies.push(v1 as u32);
+                indicies.push(v4 as u32);
+                indicies.push(v2 as u32);
 
-    output.reset(sdf.len());
+                indicies.push(v1 as u32);
+                indicies.push(v3 as u32);
+                indicies.push(v4 as u32);
+            }
+        }
+    } else {
+        match face_result {
+            FaceResult::NoFace => (),
+            FaceResult::FacePositive => {
+                indicies.push(v2 as u32);
+                indicies.push(v4 as u32);
+                indicies.push(v3 as u32);
 
-    estimate_surface(sdf, shape, min, max, output);
-    make_all_quads(sdf, shape, min, max, output);
-}
+                indicies.push(v2 as u32);
+                indicies.push(v3 as u32);
+                indicies.push(v1 as u32);
+            }
+            FaceResult::FaceNegative => {
+                indicies.push(v2 as u32);
+                indicies.push(v3 as u32);
+                indicies.push(v4 as u32);
 
-// Find all vertex positions and normals. Also generate a map from grid position to vertex index to be used to look up vertices
-// when generating quads.
-fn estimate_surface<T, S>(
-    sdf: &[T],
-    shape: &S,
-    [minx, miny, minz]: [u32; 3],
-    [maxx, maxy, maxz]: [u32; 3],
-    output: &mut SurfaceNetsBuffer,
-) where
-    T: SignedDistance,
-    S: Shape<3, Coord = u32>,
-{
-    for z in minz..maxz {
-        for y in miny..maxy {
-            for x in minx..maxx {
-                let stride = shape.linearize([x, y, z]);
-                let p = Vec3::new(x as f32, y as f32, z as f32);
-                if estimate_surface_in_cube(sdf, shape, p, stride, output) {
-                    output.stride_to_index[stride as usize] = output.positions.len() as u32 - 1;
-                    output.surface_points.push([x, y, z]);
-                    output.surface_strides.push(stride);
-                } else {
-                    output.stride_to_index[stride as usize] = NULL_VERTEX;
-                }
+                indicies.push(v2 as u32);
+                indicies.push(v1 as u32);
+                indicies.push(v3 as u32);
             }
         }
     }
 }
 
-// Consider the grid-aligned cube where `p` is the minimal corner. Find a point inside this cube that is approximately on the
-// isosurface.
-//
-// This is done by estimating, for each cube edge, where the isosurface crosses the edge (if it does at all). Then the estimated
-// surface point is the average of these edge crossings.
-fn estimate_surface_in_cube<T, S>(
-    sdf: &[T],
-    shape: &S,
-    p: Vec3,
-    min_corner_stride: u32,
-    output: &mut SurfaceNetsBuffer,
-) -> bool
-where
-    T: SignedDistance,
-    S: Shape<3, Coord = u32>,
-{
-    // Get the signed distance values at each corner of this cube.
-    let mut corner_dists = [0f32; 8];
-    let mut num_negative = 0;
-    for (i, dist) in corner_dists.iter_mut().enumerate() {
-        let corner_stride = min_corner_stride + shape.linearize(CUBE_CORNERS[i]);
-        let d = *unsafe { sdf.get_unchecked(corner_stride as usize) };
-        *dist = d.into();
-        if d.is_negative() {
-            num_negative += 1;
-        }
-    }
-
-    if num_negative == 0 || num_negative == 8 {
-        // No crossings.
-        return false;
-    }
-
-    let c = centroid_of_edge_intersections(&corner_dists);
-
-    output.positions.push((p + c).into());
-    output.normals.push(sdf_gradient(&corner_dists, c).into());
-
-    true
+enum FaceResult {
+    NoFace,
+    FacePositive,
+    FaceNegative,
 }
 
-fn centroid_of_edge_intersections(dists: &[f32; 8]) -> Vec3 { // Replace with QEF solver to get actual dual contouring. Additionally to get manifold dual contouring, insert ability to get multiple vertices.
-    let mut count = 0;
-    let mut sum = Vec3::ZERO;
-    for &[corner1, corner2] in CUBE_EDGES.iter() {
-        let d1 = dists[corner1 as usize];
-        let d2 = dists[corner2 as usize];
-        if (d1 < 0.0) != (d2 < 0.0) {
-            count += 1;
-            sum += estimate_surface_edge_intersection(corner1, corner2, d1, d2);
-        }
-    }
-
-    sum / count as f32
-}
-
-// Given two cube corners, find the point between them where the SDF is zero. (This might not exist).
-fn estimate_surface_edge_intersection(
-    corner1: u32,
-    corner2: u32,
-    value1: f32,
-    value2: f32,
-) -> Vec3 {
-    let interp1 = value1 / (value1 - value2);
-    let interp2 = 1.0 - interp1;
-
-    interp2 * CUBE_CORNER_VECTORS[corner1 as usize]
-        + interp1 * CUBE_CORNER_VECTORS[corner2 as usize]
-}
-
-/// Calculate the normal as the gradient of the distance field. Don't bother making it a unit vector, since we'll do that on the
-/// GPU.
-///
-/// For each dimension, there are 4 cube edges along that axis. This will do bilinear interpolation between the differences
-/// along those edges based on the position of the surface (s).
-fn sdf_gradient(dists: &[f32; 8], s: Vec3) -> Vec3 {
-    let p00 = Vec3::new(dists[0b001], dists[0b010], dists[0b100]);
-    let n00 = Vec3::new(dists[0b000], dists[0b000], dists[0b000]);
-
-    let p10 = Vec3::new(dists[0b101], dists[0b011], dists[0b110]);
-    let n10 = Vec3::new(dists[0b100], dists[0b001], dists[0b010]);
-
-    let p01 = Vec3::new(dists[0b011], dists[0b110], dists[0b101]);
-    let n01 = Vec3::new(dists[0b010], dists[0b100], dists[0b001]);
-
-    let p11 = Vec3::new(dists[0b111], dists[0b111], dists[0b111]);
-    let n11 = Vec3::new(dists[0b110], dists[0b101], dists[0b011]);
-
-    // Each dimension encodes an edge delta, giving 12 in total.
-    let d00 = p00 - n00; // Edges (0b00x, 0b0y0, 0bz00)
-    let d10 = p10 - n10; // Edges (0b10x, 0b0y1, 0bz10)
-    let d01 = p01 - n01; // Edges (0b01x, 0b1y0, 0bz01)
-    let d11 = p11 - n11; // Edges (0b11x, 0b1y1, 0bz11)
-
-    let c = Vec3::ONE - s;
-
-    // Do bilinear interpolation between 4 edges in each dimension.
-    c.yzx() * c.zxy() * d00
-        + c.yzx() * s.zxy() * d10
-        + s.yzx() * c.zxy() * d01
-        + s.yzx() * s.zxy() * d11
-}
-
-// For every edge that crosses the isosurface, make a quad between the "centers" of the four cubes touching that surface. The
-// "centers" are actually the vertex positions found earlier. Also make sure the triangles are facing the right way. See the
-// comments on `maybe_make_quad` to help with understanding the indexing.
-fn make_all_quads<T, S>(
-    sdf: &[T],
-    shape: &S,
-    [minx, miny, minz]: [u32; 3],
-    [maxx, maxy, maxz]: [u32; 3],
-    output: &mut SurfaceNetsBuffer,
-) where
-    T: SignedDistance,
-    S: Shape<3, Coord = u32>,
-{
-    let xyz_strides = [
-        shape.linearize([1, 0, 0]) as usize,
-        shape.linearize([0, 1, 0]) as usize,
-        shape.linearize([0, 0, 1]) as usize,
-    ];
-
-    for (&[x, y, z], &p_stride) in output
-        .surface_points
-        .iter()
-        .zip(output.surface_strides.iter())
-    {
-        let p_stride = p_stride as usize;
-
-        // Do edges parallel with the X axis
-        if y != miny && z != minz && x != maxx - 1 {
-            maybe_make_quad(
-                sdf,
-                &output.stride_to_index,
-                &output.positions,
-                p_stride,
-                p_stride + xyz_strides[0],
-                xyz_strides[1],
-                xyz_strides[2],
-                &mut output.indices,
-            );
-        }
-        // Do edges parallel with the Y axis
-        if x != minx && z != minz && y != maxy - 1 {
-            maybe_make_quad(
-                sdf,
-                &output.stride_to_index,
-                &output.positions,
-                p_stride,
-                p_stride + xyz_strides[1],
-                xyz_strides[2],
-                xyz_strides[0],
-                &mut output.indices,
-            );
-        }
-        // Do edges parallel with the Z axis
-        if x != minx && y != miny && z != maxz - 1 {
-            maybe_make_quad(
-                sdf,
-                &output.stride_to_index,
-                &output.positions,
-                p_stride,
-                p_stride + xyz_strides[2],
-                xyz_strides[0],
-                xyz_strides[1],
-                &mut output.indices,
-            );
-        }
+// Determine if the sign of the SDF flips between coord and (coord+offset)
+fn is_face(
+    grid_values: &GridSDF,
+    coord: (usize, usize, usize),
+    offset: (usize, usize, usize),
+) -> FaceResult {
+    let other = (coord.0 + offset.0, coord.1 + offset.1, coord.2 + offset.2);
+    match (
+        grid_values(coord.0, coord.1, coord.2) < 0.0,
+        grid_values(other.0, other.1, other.2) < 0.0,
+    ) {
+        (true, false) => FaceResult::FacePositive,
+        (false, true) => FaceResult::FaceNegative,
+        _ => FaceResult::NoFace,
     }
 }
-
-// Construct a quad in the dual graph of the SDF lattice.
-//
-// The surface point s was found somewhere inside of the cube with minimal corner p1.
-//
-//       x ---- x
-//      /      /|
-//     x ---- x |
-//     |   s  | x
-//     |      |/
-//    p1 --- p2
-//
-// And now we want to find the quad between p1 and p2 where s is a corner of the quad.
-//
-//          s
-//         /|
-//        / |
-//       |  |
-//   p1  |  |  p2
-//       | /
-//       |/
-//
-// If A is (of the three grid axes) the axis between p1 and p2,
-//
-//       A
-//   p1 ---> p2
-//
-// then we must find the other 3 quad corners by moving along the other two axes (those orthogonal to A) in the negative
-// directions; these are axis B and axis C.
-#[allow(clippy::too_many_arguments)]
-fn maybe_make_quad<T>(
-    sdf: &[T],
-    stride_to_index: &[u32],
-    positions: &[[f32; 3]],
-    p1: usize,
-    p2: usize,
-    axis_b_stride: usize,
-    axis_c_stride: usize,
-    indices: &mut Vec<u32>,
-) where
-    T: SignedDistance,
-{
-    let d1 = unsafe { sdf.get_unchecked(p1) };
-    let d2 = unsafe { sdf.get_unchecked(p2) };
-    let negative_face = match (d1.is_negative(), d2.is_negative()) {
-        (true, false) => false,
-        (false, true) => true,
-        _ => return, // No face.
-    };
-
-    // The triangle points, viewed face-front, look like this:
-    // v1 v3
-    // v2 v4
-    let v1 = stride_to_index[p1];
-    let v2 = stride_to_index[p1 - axis_b_stride];
-    let v3 = stride_to_index[p1 - axis_c_stride];
-    let v4 = stride_to_index[p1 - axis_b_stride - axis_c_stride];
-    let (pos1, pos2, pos3, pos4) = (
-        Vec3::splat(positions[v1 as usize]),
-        Vec3::splat(positions[v2 as usize]),
-        Vec3::splat(positions[v3 as usize]),
-        Vec3::splat(positions[v4 as usize]),
-    );
-    // Split the quad along the shorter axis, rather than the longer one.
-    let quad = if pos1.distance_squared(pos4) < pos2.distance_squared(pos3) {
-        if negative_face {
-            [v1, v4, v2, v1, v3, v4]
-        } else {
-            [v1, v2, v4, v1, v4, v3]
-        }
-    } else if negative_face {
-        [v2, v3, v4, v2, v1, v3]
-    } else {
-        [v2, v4, v3, v2, v3, v1]
-    };
-    indices.extend_from_slice(&quad);
-}
-
-const CUBE_CORNERS: [[u32; 3]; 8] = [
-    [0, 0, 0],
-    [1, 0, 0],
-    [0, 1, 0],
-    [1, 1, 0],
-    [0, 0, 1],
-    [1, 0, 1],
-    [0, 1, 1],
-    [1, 1, 1],
-];
-const CUBE_CORNER_VECTORS: [Vec3; 8] = [
-    Vec3::new(0.0, 0.0, 0.0),
-    Vec3::new(1.0, 0.0, 0.0),
-    Vec3::new(0.0, 1.0, 0.0),
-    Vec3::new(1.0, 1.0, 0.0),
-    Vec3::new(0.0, 0.0, 1.0),
-    Vec3::new(1.0, 0.0, 1.0),
-    Vec3::new(0.0, 1.0, 1.0),
-    Vec3::new(1.0, 1.0, 1.0),
-];
-const CUBE_EDGES: [[u32; 2]; 12] = [
-    [0b000, 0b001],
-    [0b000, 0b010],
-    [0b000, 0b100],
-    [0b001, 0b011],
-    [0b001, 0b101],
-    [0b010, 0b011],
-    [0b010, 0b110],
-    [0b011, 0b111],
-    [0b100, 0b101],
-    [0b100, 0b110],
-    [0b101, 0b111],
-    [0b110, 0b111],
-];
