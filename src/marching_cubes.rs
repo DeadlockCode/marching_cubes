@@ -11,11 +11,11 @@ fn implicit_function(x: f32, y: f32, z: f32) -> f32 {
 }
 
 fn generate_mesh(origin: Vec3) -> Mesh {
-    const RESOLUTION: usize = 16;
+    const RESOLUTION: usize = 15;
 
     let mut points = Box::new([0.0f32; (RESOLUTION + 1) * (RESOLUTION + 1) * (RESOLUTION + 1)]);
 
-    let step = 1.0 / (RESOLUTION) as f32;
+    let step = 1.0 / RESOLUTION as f32;
 
     //let fbm = Fbm::new();
     for z in 0..(RESOLUTION + 1) {
@@ -89,14 +89,16 @@ pub fn spawn_marching_cubed_surface(
         ..Default::default()
     });
 
+    let ofst = RESOLUTION as f32 / 2.0;
+
     parent.with_children(|parent| {
-        for z in (-RESOLUTION / 2)..(RESOLUTION / 2 + 1) {
-            for y in (-RESOLUTION / 2)..(RESOLUTION / 2 + 1) {
-                for x in (-RESOLUTION / 2)..(RESOLUTION / 2 + 1) {
+        for z in 0..RESOLUTION {
+            for y in 0..RESOLUTION {
+                for x in 0..RESOLUTION {
                     parent.spawn_bundle(PbrBundle {
-                        mesh: meshes.add(generate_mesh(Vec3::new(x as f32, y as f32, z as f32))),
-                        material: materials.add(Color::rgb(0.3, 0.5, 0.3).into()),
-                        transform: Transform::from_translation(Vec3::new(x as f32, y as f32, z as f32)),
+                        mesh: meshes.add(generate_mesh(Vec3::new(x as f32 - ofst, y as f32 - ofst, z as f32 - ofst))),
+                        material: materials.add(Color::rgb(0.4, 0.7, 1.0).into()),
+                        transform: Transform::from_translation(Vec3::new(x as f32 - ofst, y as f32 - ofst, z as f32 - ofst)),
                         ..Default::default()
                     });
                 }

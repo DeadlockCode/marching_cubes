@@ -1,4 +1,5 @@
 mod marching_cubes;
+mod surface_nets;
 
 use bevy::{prelude::*, input::mouse::MouseMotion, render::settings::{WgpuSettings, WgpuFeatures}, pbr::wireframe::WireframePlugin, window::WindowFocused};
 use bevy_inspector_egui::WorldInspectorPlugin;
@@ -17,6 +18,7 @@ fn main() {
             features: WgpuFeatures::POLYGON_MODE_LINE,
             ..default()
         })
+        .insert_resource(Msaa { samples: 4 })
         .insert_resource(ClearColor(Color::BLACK))
         .insert_resource(WindowDescriptor {
             width: WIDTH,
@@ -78,7 +80,7 @@ fn update_camera(
 
 fn spawn_camera(mut commands: Commands) {
     commands.spawn_bundle(Camera3dBundle {
-        transform: Transform::from_xyz(-2.0, 2.5, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
+        transform: Transform::from_xyz(0.0, 0.0, 0.0),
         ..Default::default()
     })
     .insert(Name::new("Camera"));
