@@ -1,37 +1,32 @@
 use bevy::utils::HashMap;
+use stopwatch::Stopwatch;
 
-// Positive is "air"
-// Negative is "solid"
-
-pub type SDF = dyn Fn(f32, f32, f32) -> f32;
+type SDF = dyn Fn(f32, f32, f32) -> f32;
 type GridSDF = dyn Fn(usize, usize, usize) -> f32;
 
+// Main algorithm driver.
 pub fn surface_net(
     resolution: usize,
     signed_distance_field: &SDF,
 ) -> (Vec<[f32; 3]>, Vec<[f32; 3]>, Vec<u32>) {
+    let sw = Stopwatch::start_new();
+
     let axis_length = resolution + 1;
-    let arr = coords(axis_length)
+    let grid = coords(axis_length)
         .map(|(x, y, z)| signed_distance_field(x as f32, y as f32, z as f32))
         .collect::<Vec<_>>();
-    surface_net_impl(resolution, &move |x, y, z| {
-        arr[z * axis_length * axis_length + y * axis_length + x]
-    })
-}
+    let grid_values = &move |x, y, z| {
+        unsafe { *grid.get_unchecked(x + y * axis_length + z * axis_length * axis_length) }
+    };
 
-// Main algorithm driver.
-fn surface_net_impl(
-    resolution: usize,
-    grid_values: &GridSDF,
-) -> (Vec<[f32; 3]>, Vec<[f32; 3]>, Vec<u32>) {
     let mut positions = Vec::new();
     let mut normals = Vec::new();
     let mut grid_to_index = HashMap::new();
     // Find all vertex positions. Addtionally, create a hashmap from grid
-    // position to index (i.e. OpenGL vertex index).
-    for coords in coords(resolution) {
-        if let Some((center, normal)) = find_center(grid_values, coords) {
-            grid_to_index.insert(coords, positions.len());
+    // position to index.
+    for coord in coords(resolution) {
+        if let Some((center, normal)) = find_center(grid_values, coord) {
+            grid_to_index.insert(coord, positions.len());
             positions.push(center);
             normals.push(normal);
         }
@@ -45,6 +40,7 @@ fn surface_net_impl(
         &positions,
         &mut indicies,
     );
+    println!("Surface nets took: {}ms", sw.elapsed_ms());
     (positions, normals, indicies)
 }
 

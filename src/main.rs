@@ -1,7 +1,7 @@
 mod marching_cubes;
 mod surface_nets;
 
-use bevy::{prelude::*, input::mouse::MouseMotion, render::{settings::{WgpuSettings, WgpuFeatures}, mesh::Indices}, pbr::wireframe::{WireframePlugin, WireframeConfig}};
+use bevy::{prelude::*, input::mouse::MouseMotion, render::{settings::{WgpuSettings, WgpuFeatures}, mesh::Indices}, pbr::wireframe::{WireframePlugin, WireframeConfig}, log::LogSettings, ecs::bundle};
 use bevy_inspector_egui::WorldInspectorPlugin;
 
 pub const WIDTH: f32 = 1280.0;
@@ -25,12 +25,16 @@ fn main() {
             resizable: false,
             ..Default::default()
         })
+        .insert_resource(LogSettings {
+            level: bevy::log::Level::WARN,
+            ..Default::default()
+        })
         .add_plugins(DefaultPlugins)
         .add_plugin(WorldInspectorPlugin::new())
         .add_plugin(WireframePlugin)
         .add_startup_system(spawn_camera)
-        .add_startup_system(spawn_thing)
-        .add_startup_system(spawn_other_thing)
+        .add_startup_system(surface_nets_mesh)
+        .add_startup_system(marching_cubes_mesh)
         .add_startup_system(spawn_light)
         .add_system(update_camera)
         .run();
@@ -77,18 +81,46 @@ fn update_camera(
     }
 }
 
-const RESOLUTION: usize = 32;
+fn update_surface_nets(
+    //surface_nets_query: &mut Query<(Entity, &SurfaceNets)>,
+) {
+    //for (entity, surface_nets) in surface_nets_query.iter_mut() {
+    //
+    //}  
+}
+
+#[derive(Bundle)]
+struct SurfaceNetBundle {
+    pub mesh: Handle<Mesh>,
+    pub material: Handle<StandardMaterial>,
+    pub transform: Transform,
+    pub global_transform: GlobalTransform,
+    pub visibility: Visibility,
+    pub computed_visibility: ComputedVisibility,
+}
+
+type SDF = dyn Fn(f32, f32, f32) -> f32;
+impl SurfaceNetBundle {
+    fn new(
+        resolution: usize, 
+        implicit_function: &SDF
+    ) {
+        
+    }
+}
+
+const RESOLUTION: usize = 64;
 
 fn implicit_function(i: f32, j: f32, k: f32) -> f32 {
     let res = RESOLUTION as f32 * 0.5;
-    let mul = 3.6 / res;
+    let mul = 3.7 / res;
 
     let (x, y, z) = ((i - res) * mul, (j - res) * mul, (k - res) * mul);
 
     (x-2.0)*(x-2.0)*(x+2.0)*(x+2.0) + (y-2.0)*(y-2.0)*(y+2.0)*(y+2.0) + (z-2.0)*(z-2.0)*(z+2.0)*(z+2.0) + 3.0*(x*x*y*y+x*x*z*z+y*y*z*z) + 6.0*x*y*z - 10.0*(x*x+y*y+z*z) + 22.0
 }
 
-fn spawn_thing(
+fn surface_nets_mesh(
     mut commands: Commands,
     mut wireframe_config: ResMut<WireframeConfig>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -103,6 +135,15 @@ fn spawn_thing(
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
 
+    //commands.spawn_bundle(SurfaceNetBundle {
+    //    mesh: todo!(),
+    //    material: todo!(),
+    //    transform: todo!(),
+    //    global_transform: todo!(),
+    //    visibility: todo!(),
+    //    computed_visibility: todo!(),
+    //});
+
     commands.spawn_bundle(PbrBundle {
         mesh: meshes.add(mesh),
         material: materials.add(Color::rgb(0.4, 0.7, 1.0).into()),
@@ -111,7 +152,7 @@ fn spawn_thing(
     });
 }
 
-pub fn spawn_other_thing(
+pub fn marching_cubes_mesh(
     mut commands: Commands,
     mut wireframe_config: ResMut<WireframeConfig>,
     mut meshes: ResMut<Assets<Mesh>>,
