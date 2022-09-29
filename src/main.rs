@@ -1,7 +1,7 @@
 mod marching_cubes;
 mod surface_nets;
 
-use bevy::{prelude::*, input::mouse::MouseMotion, render::{settings::{WgpuSettings, WgpuFeatures}, mesh::Indices}, pbr::wireframe::{WireframePlugin, WireframeConfig}, log::LogSettings, ecs::bundle};
+use bevy::{prelude::*, input::mouse::MouseMotion, render::{settings::{WgpuSettings, WgpuFeatures}, mesh::Indices}, pbr::wireframe::{WireframePlugin, WireframeConfig}, log::LogSettings};
 use bevy_inspector_egui::WorldInspectorPlugin;
 
 pub const WIDTH: f32 = 1280.0;
@@ -37,6 +37,7 @@ fn main() {
         .add_startup_system(marching_cubes_mesh)
         .add_startup_system(spawn_light)
         .add_system(update_camera)
+        .add_system(update_surface_nets)
         .run();
 }
 
@@ -82,11 +83,36 @@ fn update_camera(
 }
 
 fn update_surface_nets(
-    //surface_nets_query: &mut Query<(Entity, &SurfaceNets)>,
+    surface_nets_query: Query<(&SurfaceNets, &mut Handle<Mesh>)>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    time: Res<Time>,
 ) {
-    //for (entity, surface_nets) in surface_nets_query.iter_mut() {
-    //
-    //}  
+    for (surface_nets, mesh_handle) in surface_nets_query.iter() {
+        let mesh = meshes.get_mut(mesh_handle).unwrap();
+
+        let implicit_function = &|i, j, k| {
+            let res = RESOLUTION as f32 * 0.5;
+            let mul = 3.7 / res;
+        
+            let (x, y, z) = ((i - res) * mul, (j - res) * mul, (k - res) * mul);
+        
+            //figure out how to get time into here.
+
+            (x-2.0)*(x-2.0)*(x+2.0)*(x+2.0) + (y-2.0)*(y-2.0)*(y+2.0)*(y+2.0) + (z-2.0)*(z-2.0)*(z+2.0)*(z+2.0) + 3.0*(x*x*y*y+x*x*z*z+y*y*z*z) + 6.0*x*y*z - 10.0*(x*x+y*y+z*z) + 22.0
+        };
+
+        let (positions, normals, indices) = surface_nets::surface_net(RESOLUTION, &implicit_function);
+    
+        mesh.set_indices(Some(Indices::U32(indices)));
+        mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+        mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+
+        println!("Hola!")
+    }  
+}
+
+#[derive(Component)]
+struct SurfaceNets {
 }
 
 #[derive(Bundle)]
@@ -97,15 +123,20 @@ struct SurfaceNetBundle {
     pub global_transform: GlobalTransform,
     pub visibility: Visibility,
     pub computed_visibility: ComputedVisibility,
+    pub surface_nets: SurfaceNets,
 }
 
-type SDF = dyn Fn(f32, f32, f32) -> f32;
-impl SurfaceNetBundle {
-    fn new(
-        resolution: usize, 
-        implicit_function: &SDF
-    ) {
-        
+impl Default for SurfaceNetBundle {
+    fn default() -> Self {
+        Self {
+            mesh: Default::default(),
+            material: Default::default(),
+            transform: Default::default(),
+            global_transform: Default::default(),
+            visibility: Default::default(),
+            computed_visibility: Default::default(),
+            surface_nets: SurfaceNets {},
+        }
     }
 }
 
@@ -144,7 +175,7 @@ fn surface_nets_mesh(
     //    computed_visibility: todo!(),
     //});
 
-    commands.spawn_bundle(PbrBundle {
+    commands.spawn_bundle(SurfaceNetBundle {
         mesh: meshes.add(mesh),
         material: materials.add(Color::rgb(0.4, 0.7, 1.0).into()),
         transform: Transform::from_translation(Vec3::new(-(RESOLUTION as f32), 0.0, 0.0)),
