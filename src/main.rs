@@ -82,6 +82,7 @@ fn update_camera(
     }
 }
 
+type SDF = dyn Fn(f32, f32, f32) -> f32;
 fn update_surface_nets(
     surface_nets_query: Query<(&SurfaceNets, &mut Handle<Mesh>)>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -90,24 +91,24 @@ fn update_surface_nets(
     for (surface_nets, mesh_handle) in surface_nets_query.iter() {
         let mesh = meshes.get_mut(mesh_handle).unwrap();
 
-        let implicit_function = &|i, j, k| {
+        let my_time = (time.seconds_since_startup().cos() as f32 + 1.0) * 5.0;
+
+        let implicit_function = &move |i, j, k| {
             let res = RESOLUTION as f32 * 0.5;
             let mul = 3.7 / res;
         
             let (x, y, z) = ((i - res) * mul, (j - res) * mul, (k - res) * mul);
         
-            //figure out how to get time into here.
+            //figure out how to get time into here. // yay i did it
 
-            (x-2.0)*(x-2.0)*(x+2.0)*(x+2.0) + (y-2.0)*(y-2.0)*(y+2.0)*(y+2.0) + (z-2.0)*(z-2.0)*(z+2.0)*(z+2.0) + 3.0*(x*x*y*y+x*x*z*z+y*y*z*z) + 6.0*x*y*z - 10.0*(x*x+y*y+z*z) + 22.0
+            (x-2.0)*(x-2.0)*(x+2.0)*(x+2.0) + (y-2.0)*(y-2.0)*(y+2.0)*(y+2.0) + (z-2.0)*(z-2.0)*(z+2.0)*(z+2.0) + 3.0*(x*x*y*y+x*x*z*z+y*y*z*z) + 6.0*x*y*z - 10.0*(x*x+y*y+z*z) + 22.0 + my_time
         };
 
-        let (positions, normals, indices) = surface_nets::surface_net(RESOLUTION, &implicit_function);
+        let (positions, normals, indices) = surface_nets::surface_net(RESOLUTION, implicit_function);
     
         mesh.set_indices(Some(Indices::U32(indices)));
         mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
         mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
-
-        println!("Hola!")
     }  
 }
 
@@ -140,7 +141,7 @@ impl Default for SurfaceNetBundle {
     }
 }
 
-const RESOLUTION: usize = 64;
+const RESOLUTION: usize = 32;
 
 fn implicit_function(i: f32, j: f32, k: f32) -> f32 {
     let res = RESOLUTION as f32 * 0.5;
@@ -165,15 +166,6 @@ fn surface_nets_mesh(
     mesh.set_indices(Some(Indices::U32(indices)));
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
-
-    //commands.spawn_bundle(SurfaceNetBundle {
-    //    mesh: todo!(),
-    //    material: todo!(),
-    //    transform: todo!(),
-    //    global_transform: todo!(),
-    //    visibility: todo!(),
-    //    computed_visibility: todo!(),
-    //});
 
     commands.spawn_bundle(SurfaceNetBundle {
         mesh: meshes.add(mesh),
