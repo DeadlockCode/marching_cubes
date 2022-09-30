@@ -84,27 +84,38 @@ fn update_camera(
 
 type SDF = dyn Fn(f32, f32, f32) -> f32;
 fn update_surface_nets(
-    surface_nets_query: Query<(&SurfaceNets, &mut Handle<Mesh>)>,
+    mut surface_nets_query: Query<(&SurfaceNets, &Handle<Mesh>, &mut Transform)>,
     mut meshes: ResMut<Assets<Mesh>>,
     time: Res<Time>,
 ) {
-    for (surface_nets, mesh_handle) in surface_nets_query.iter() {
+    for (surface_nets, mesh_handle, mut transform) in surface_nets_query.iter_mut() {
         let mesh = meshes.get_mut(mesh_handle).unwrap();
 
-        let my_time = (time.seconds_since_startup().cos() as f32 + 1.0) * 5.0;
+        let my_time = (time.seconds_since_startup().cos() as f32 + 1.0) * 16.0;
+
+        let resolution = RESOLUTION - my_time as usize;
+
+        transform.scale = Vec3::splat(32.0 / resolution as f32);
+
 
         let implicit_function = &move |i, j, k| {
-            let res = RESOLUTION as f32 * 0.5;
+            let res = resolution as f32 * 0.5;
             let mul = 3.7 / res;
         
             let (x, y, z) = ((i - res) * mul, (j - res) * mul, (k - res) * mul);
         
             //figure out how to get time into here. // yay i did it
 
-            (x-2.0)*(x-2.0)*(x+2.0)*(x+2.0) + (y-2.0)*(y-2.0)*(y+2.0)*(y+2.0) + (z-2.0)*(z-2.0)*(z+2.0)*(z+2.0) + 3.0*(x*x*y*y+x*x*z*z+y*y*z*z) + 6.0*x*y*z - 10.0*(x*x+y*y+z*z) + 22.0 + my_time
+            (x-2.0)*(x-2.0)*(x+2.0)*(x+2.0)
+                + (y-2.0)*(y-2.0)*(y+2.0)*(y+2.0) 
+                + (z-2.0)*(z-2.0)*(z+2.0)*(z+2.0) 
+                + 3.0*(x*x*y*y+x*x*z*z+y*y*z*z) 
+                + 6.0*x*y*z 
+                - 10.0*(x*x+y*y+z*z) 
+                + 22.0
         };
 
-        let (positions, normals, indices) = surface_nets::surface_net(RESOLUTION, implicit_function);
+        let (positions, normals, indices) = surface_nets::surface_net(resolution, implicit_function);
     
         mesh.set_indices(Some(Indices::U32(indices)));
         mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
