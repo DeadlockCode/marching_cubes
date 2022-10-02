@@ -1,4 +1,4 @@
-mod march_tables;
+pub mod march_tables;
 
 use bevy::{prelude::*, utils::HashMap};
 use stopwatch::Stopwatch;
@@ -13,11 +13,11 @@ pub fn marching_cubes(
     let sw = Stopwatch::start_new();
 
     let axis_length = resolution + 1;
-    let points = coords(resolution + 1)
+    let grid = coords(resolution + 1)
         .map(|(x, y, z)| signed_distance_field(x as f32, y as f32, z as f32))
         .collect::<Vec<_>>();
     let grid_values = &move |x, y, z| {
-        unsafe { *points.get_unchecked(z * axis_length * axis_length + y * axis_length + x) }
+        unsafe { *grid.get_unchecked(z * axis_length * axis_length + y * axis_length + x) }
     };
 
     let mut edge_to_index = HashMap::<[usize; 3], u32>::new();
@@ -42,7 +42,44 @@ pub fn marching_cubes(
     let normals = calculate_smooth_normals(&positions, &indices);
 
     println!("Marching cubes took: {}ms", sw.elapsed_ms());
+
     (positions, normals, indices)
+}
+
+pub fn marching_cubes_flat(
+    resolution: usize,
+    signed_distance_field: &SDF,
+) -> Vec<[f32; 3]> {
+    let sw = Stopwatch::start_new();
+
+    let axis_length = resolution + 1;
+    let grid = coords(resolution + 1)
+        .map(|(x, y, z)| signed_distance_field(x as f32, y as f32, z as f32))
+        .collect::<Vec<_>>();
+    let grid_values = &move |x, y, z| {
+        unsafe { *grid.get_unchecked(z * axis_length * axis_length + y * axis_length + x) }
+    };
+
+    let mut positions = Vec::<[f32; 3]>::new();
+
+    for z in 0..resolution {
+        for y in 0..resolution {
+            for x in 0..resolution {
+                
+                let triangulation = get_triangulation(grid_values, (x, y, z));
+
+                for edge_index in triangulation {
+                    if edge_index == march_tables::INV { break; }
+
+                    make_vertex_flat(grid_values, &mut positions, (x, y, z), edge_index as usize);
+                }
+            }
+        }
+    }
+
+    println!("Marching cubes took: {}ms", sw.elapsed_ms());
+
+    positions
 }
 
 fn calculate_smooth_normals(
@@ -52,19 +89,27 @@ fn calculate_smooth_normals(
     let mut normals = vec![[0.0; 3]; positions.len()];
 
     for idx in 0..indices.len()/3 {
-        let norm1: Vec3 = normals[indices[idx * 3 + 0] as usize].into();
-        let norm2: Vec3 = normals[indices[idx * 3 + 1] as usize].into();
-        let norm3: Vec3 = normals[indices[idx * 3 + 2] as usize].into();
+        let i1 = indices[idx * 3 + 0] as usize;
+        let i2 = indices[idx * 3 + 1] as usize;
+        let i3 = indices[idx * 3 + 2] as usize;
 
-        let pos1: Vec3 = positions[indices[idx * 3 + 0] as usize].into();
-        let pos2: Vec3 = positions[indices[idx * 3 + 1] as usize].into();
-        let pos3: Vec3 = positions[indices[idx * 3 + 2] as usize].into();
+        let p1: Vec3 = positions[i1].into();
+        let p2: Vec3 = positions[i2].into();
+        let p3: Vec3 = positions[i3].into();
 
-        let normal = Vec3::cross((pos2 - pos1).normalize(), (pos3 - pos1).normalize());
+        let n = (p2 - p1).cross(p3 - p1);
 
-        normals[indices[idx * 3 + 0] as usize] = (norm1 + normal).into();
-        normals[indices[idx * 3 + 1] as usize] = (norm2 + normal).into();
-        normals[indices[idx * 3 + 2] as usize] = (norm3 + normal).into();
+        let a1 = (p2 - p1).angle_between(p3 - p1);
+        let a2 = (p3 - p2).angle_between(p1 - p2);
+        let a3 = (p1 - p3).angle_between(p2 - p3);
+
+        let n1: Vec3 = normals[i1].into();
+        let n2: Vec3 = normals[i2].into();
+        let n3: Vec3 = normals[i3].into();
+
+        normals[i1] = (n1 + n * a1).into();
+        normals[i2] = (n2 + n * a2).into();
+        normals[i3] = (n3 + n * a3).into();
     }
 
     for idx in 0..normals.len() {
@@ -85,13 +130,13 @@ fn make_vertex(
     let off_a = march_tables::POINT_OFFSETS[march_tables::CORNER_INDEX_A_FROM_EDGE[edge_index]];
     let off_b = march_tables::POINT_OFFSETS[march_tables::CORNER_INDEX_B_FROM_EDGE[edge_index]];
 
-    let edge = [coord.0 * 2 + off_a.0 + off_b.0, coord.1 * 2 + off_a.1 + off_b.1, coord.2 * 2 + off_a.2 + off_b.2];
+    let edge = [coord.0 * 2 + off_a[0] + off_b[0], coord.1 * 2 + off_a[1] + off_b[1], coord.2 * 2 + off_a[2] + off_b[2]];
 
     match edge_to_index.get(&edge) {
         Some(i) => indices.push(*i),
         None => {
-            let pos_a: Vec3 = Vec3::new((coord.0 + off_a.0) as f32, (coord.1 + off_a.1) as f32, (coord.2 + off_a.2) as f32);
-            let pos_b: Vec3 = Vec3::new((coord.0 + off_b.0) as f32, (coord.1 + off_b.1) as f32, (coord.2 + off_b.2) as f32);
+            let pos_a: Vec3 = Vec3::new((coord.0 + off_a[0]) as f32, (coord.1 + off_a[1]) as f32, (coord.2 + off_a[2]) as f32);
+            let pos_b: Vec3 = Vec3::new((coord.0 + off_b[0]) as f32, (coord.1 + off_b[1]) as f32, (coord.2 + off_b[2]) as f32);
         
             let val_a = grid_values(pos_a.x as usize, pos_a.y as usize, pos_a.z as usize);
             let val_b = grid_values(pos_b.x as usize, pos_b.y as usize, pos_b.z as usize);
@@ -105,6 +150,28 @@ fn make_vertex(
             positions.push(position);
         },
     }
+}
+
+fn make_vertex_flat(
+    grid_values: &GridSDF,
+    positions: &mut Vec<[f32; 3]>,
+    coord: (usize, usize, usize),
+    edge_index: usize,
+) {
+    let off_a = march_tables::POINT_OFFSETS[march_tables::CORNER_INDEX_A_FROM_EDGE[edge_index]];
+    let off_b = march_tables::POINT_OFFSETS[march_tables::CORNER_INDEX_B_FROM_EDGE[edge_index]];
+
+    let pos_a: Vec3 = Vec3::new((coord.0 + off_a[0]) as f32, (coord.1 + off_a[1]) as f32, (coord.2 + off_a[2]) as f32);
+    let pos_b: Vec3 = Vec3::new((coord.0 + off_b[0]) as f32, (coord.1 + off_b[1]) as f32, (coord.2 + off_b[2]) as f32);
+
+    let val_a = grid_values(pos_a.x as usize, pos_a.y as usize, pos_a.z as usize);
+    let val_b = grid_values(pos_b.x as usize, pos_b.y as usize, pos_b.z as usize);
+
+    let t = val_a / (val_a - val_b);
+
+    let position = (pos_a + (pos_b - pos_a) * t).into();
+
+    positions.push(position);
 }
 
 fn get_triangulation(
