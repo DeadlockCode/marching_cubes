@@ -13,7 +13,11 @@ opt-level = 3
 
 [dependencies]
 bevy = "0.8.1"
-bevy-inspector-egui = "0.12.1"
+bevy-inspector-egui = "0.13.0"
+bevy_prototype_debug_lines = { version = "0.8", features = ["3d"] }
 noise = "0.7.0"
 
 stopwatch = "0.0.7"
+
+[workspace]
+resolver = "2"

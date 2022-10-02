@@ -32,16 +32,16 @@ pub fn surface_net(
         }
     }
     // Find all triangles, in the form of [index, index, index] triples.
-    let mut indicies = Vec::new();
+    let mut indices = Vec::new();
     make_all_triangles(
         grid_values,
         resolution,
         &grid_to_index,
         &positions,
-        &mut indicies,
+        &mut indices,
     );
     println!("Surface nets took: {}ms", sw.elapsed_ms());
-    (positions, normals, indicies)
+    (positions, normals, indices)
 }
 
 // Iterator over all integer points in a 3d cube from 0 to size
@@ -154,7 +154,7 @@ fn make_all_triangles(
     resolution: usize,
     grid_to_index: &HashMap<(usize, usize, usize), usize>,
     positions: &[[f32; 3]],
-    indicies: &mut Vec<u32>,
+    indices: &mut Vec<u32>,
 ) {
     for coord in coords(resolution) {
         // TODO: Cache grid_values(coord), it's called three times here.
@@ -164,7 +164,7 @@ fn make_all_triangles(
                 grid_values,
                 grid_to_index,
                 positions,
-                indicies,
+                indices,
                 coord,
                 (1, 0, 0),
                 (0, 1, 0),
@@ -177,7 +177,7 @@ fn make_all_triangles(
                 grid_values,
                 grid_to_index,
                 positions,
-                indicies,
+                indices,
                 coord,
                 (0, 1, 0),
                 (0, 0, 1),
@@ -190,7 +190,7 @@ fn make_all_triangles(
                 grid_values,
                 grid_to_index,
                 positions,
-                indicies,
+                indices,
                 coord,
                 (0, 0, 1),
                 (1, 0, 0),
@@ -204,7 +204,7 @@ fn make_triangle(
     grid_values: &GridSDF,
     grid_to_index: &HashMap<(usize, usize, usize), usize>,
     positions: &[[f32; 3]],
-    indicies: &mut Vec<u32>,
+    indices: &mut Vec<u32>,
     coord: (usize, usize, usize),
     offset: (usize, usize, usize),
     axis1: (usize, usize, usize),
@@ -246,44 +246,44 @@ fn make_triangle(
         match face_result {
             FaceResult::NoFace => (),
             FaceResult::FacePositive => {
-                indicies.push(v1 as u32);
-                indicies.push(v2 as u32);
-                indicies.push(v4 as u32);
+                indices.push(v1 as u32);
+                indices.push(v2 as u32);
+                indices.push(v4 as u32);
 
-                indicies.push(v1 as u32);
-                indicies.push(v4 as u32);
-                indicies.push(v3 as u32);
+                indices.push(v1 as u32);
+                indices.push(v4 as u32);
+                indices.push(v3 as u32);
             }
             FaceResult::FaceNegative => {
-                indicies.push(v1 as u32);
-                indicies.push(v4 as u32);
-                indicies.push(v2 as u32);
+                indices.push(v1 as u32);
+                indices.push(v4 as u32);
+                indices.push(v2 as u32);
 
-                indicies.push(v1 as u32);
-                indicies.push(v3 as u32);
-                indicies.push(v4 as u32);
+                indices.push(v1 as u32);
+                indices.push(v3 as u32);
+                indices.push(v4 as u32);
             }
         }
     } else {
         match face_result {
             FaceResult::NoFace => (),
             FaceResult::FacePositive => {
-                indicies.push(v2 as u32);
-                indicies.push(v4 as u32);
-                indicies.push(v3 as u32);
+                indices.push(v2 as u32);
+                indices.push(v4 as u32);
+                indices.push(v3 as u32);
 
-                indicies.push(v2 as u32);
-                indicies.push(v3 as u32);
-                indicies.push(v1 as u32);
+                indices.push(v2 as u32);
+                indices.push(v3 as u32);
+                indices.push(v1 as u32);
             }
             FaceResult::FaceNegative => {
-                indicies.push(v2 as u32);
-                indicies.push(v3 as u32);
-                indicies.push(v4 as u32);
+                indices.push(v2 as u32);
+                indices.push(v3 as u32);
+                indices.push(v4 as u32);
 
-                indicies.push(v2 as u32);
-                indicies.push(v1 as u32);
-                indicies.push(v3 as u32);
+                indices.push(v2 as u32);
+                indices.push(v1 as u32);
+                indices.push(v3 as u32);
             }
         }
     }
