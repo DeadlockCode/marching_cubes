@@ -78,39 +78,61 @@ fn spawn_mesh(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    /* 
-    let (positions, normals, indices) = marching_cubes::marching_cubes(RES as usize, &implicit_function);
-
-    let mut mesh = Mesh::new(bevy::render::render_resource::PrimitiveTopology::TriangleList);
-    mesh.set_indices(Some(Indices::U32(indices)));
-    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
-    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
-    */
-    let positions = marching_cubes::marching_cubes_flat(RES as usize, &implicit_function);
-
-    let mut mesh = Mesh::new(bevy::render::render_resource::PrimitiveTopology::TriangleList);
-    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
-    mesh.compute_flat_normals();
-
-    commands.spawn_bundle(PbrBundle {
-        mesh: meshes.add(mesh),
-        material: materials.add(StandardMaterial { 
+    let cached_material = materials.add(
+        StandardMaterial { 
             base_color: Color::BEIGE,
             emissive: Color::BLACK,
             perceptual_roughness: 1.0,
             metallic: 0.0,
             reflectance: 0.0,
             ..Default::default()
-        }),
-        transform: Transform::from_translation(Vec3::splat(-0.5)).with_scale(Vec3::splat(1.0/RES as f32)),
-        ..Default::default()
-    }).insert(Name::new("Mesh"));
+        });
+    
+    let mut binding = commands.spawn_bundle(SpatialBundle::default());
+    let grid = binding.insert(Name::new("Mesh"));
+
+    grid.add_children(|parent| {
+        for z in 0..RES {
+            for y in 0..RES {
+                for x in 0..RES {
+                    let positions = marching_cubes::marching_cubes_flat(1, &|i, j, k| {
+                        let mul = 7.5 / RES as f32;
+                    
+                        let (x, y, z) = (i * mul - 3.7, j * mul - 3.7, k * mul - 3.7); // offset xyz
+                    
+                        (x-2.0)*(x-2.0)*(x+2.0)*(x+2.0) + (y-2.0)*(y-2.0)*(y+2.0)*(y+2.0) + (z-2.0)*(z-2.0)*(z+2.0)*(z+2.0) + 3.0*(x*x*y*y+x*x*z*z+y*y*z*z) + 6.0*x*y*z - 10.0*(x*x+y*y+z*z) + 22.0
+                    });
+                
+                    let mut mesh = Mesh::new(bevy::render::render_resource::PrimitiveTopology::TriangleList);
+                    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+                    mesh.compute_flat_normals();
+                
+                    parent.spawn_bundle(PbrBundle {
+                        mesh: meshes.add(mesh),
+                        material: cached_material.clone(),
+                        transform: Transform::from_translation(Vec3::new(0.0, 0.0, 0.0)),//Vec3::new(x as f32, y as f32, z as f32) / (RES - 1) as f32 - Vec3::splat(0.5)).with_scale(Vec3::splat(1.0 / (RES - 1) as f32)),
+                        ..Default::default()
+                    }).insert(GridMesh{x, y, z})
+                    .insert(Name::new("(".to_owned() + &x.to_string() + &", ".to_owned() + &y.to_string() + &", ".to_owned() + &z.to_string() + &")".to_owned()));
+                }
+            }
+        }
+    });
+
+
 }
 
 const RES: u32 = 16;
 
 #[derive(Component)]
 struct GridPoint {
+    x: u32,
+    y: u32,
+    z: u32,
+}
+
+#[derive(Component)]
+struct GridMesh {
     x: u32,
     y: u32,
     z: u32,
@@ -157,8 +179,10 @@ fn grid_point_system(
     let sec = time.seconds_since_startup() as f32 - 2.0;
 
     for (mut transform, mut visibility, grid_point) in grid_points.iter_mut() {
+        let value = implicit_function(grid_point.x as f32, grid_point.y as f32, grid_point.z as f32) / 1622.794;
+
         visibility.is_visible = 
-            implicit_function(grid_point.x as f32, grid_point.y as f32, grid_point.z as f32) / 1562.3062 <= isosurface.iso_level
+            value.abs().sqrt() * value.signum() <= isosurface.iso_level
             && (sec * (RES * RES) as f32) as u32 > grid_point.x + grid_point.y * RES + grid_point.z * RES * RES;
         transform.look_at(camera_pos, Vec3::Y);
     }
@@ -195,15 +219,14 @@ fn spawn_grid(
     let mut largest = f32::MIN;
     let mut smallest = f32::MAX;
 
-    let mut binding = commands.spawn_bundle(
-        SpatialBundle::default());
+    let mut binding = commands.spawn_bundle(SpatialBundle::default());
     let grid = binding.insert(Name::new("Grid"));
 
     grid.add_children(|parent| {
         for z in 0..RES {
             for y in 0..RES {
                 for x in 0..RES {
-                    let col = (implicit_function(x as f32, y as f32, z as f32) / 1562.3062).max(0.0).sqrt();
+                    let col = (implicit_function(x as f32, y as f32, z as f32) / 1622.794).max(0.0).sqrt().sqrt();
     
                     largest = largest.max(col);
                     smallest = smallest.min(col);
