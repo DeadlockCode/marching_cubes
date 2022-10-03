@@ -53,7 +53,7 @@ pub fn marching_cubes_flat(
     let sw = Stopwatch::start_new();
 
     let axis_length = resolution + 1;
-    let grid = coords(resolution + 1)
+    let grid = coords(axis_length)
         .map(|(x, y, z)| signed_distance_field(x as f32, y as f32, z as f32))
         .collect::<Vec<_>>();
     let grid_values = &move |x, y, z| {
@@ -80,6 +80,46 @@ pub fn marching_cubes_flat(
     println!("Marching cubes took: {}ms", sw.elapsed_ms());
 
     positions
+}
+
+pub fn marching_cubes_flat_disjointed(
+    resolution: usize,
+    signed_distance_field: &SDF,
+) -> Vec<Vec<[f32; 3]>> {
+    let sw = Stopwatch::start_new();
+
+    let axis_length = resolution + 1;
+    let grid = coords(axis_length)
+        .map(|(x, y, z)| signed_distance_field(x as f32, y as f32, z as f32))
+        .collect::<Vec<_>>();
+    let grid_values = &move |x, y, z| {
+        unsafe { *grid.get_unchecked(z * axis_length * axis_length + y * axis_length + x) }
+    };
+
+    let mut positions_vec = Vec::new();
+
+
+    for z in 0..resolution {
+        for y in 0..resolution {
+            for x in 0..resolution {
+                let mut positions = Vec::<[f32; 3]>::new();
+                
+                let triangulation = get_triangulation(grid_values, (x, y, z));
+
+                for edge_index in triangulation {
+                    if edge_index == march_tables::INV { break; }
+
+                    make_vertex_flat(grid_values, &mut positions, (x, y, z), edge_index as usize);
+                }
+
+                positions_vec.push(positions);
+            }
+        }
+    }
+
+    println!("Marching cubes took: {}ms", sw.elapsed_ms());
+
+    positions_vec
 }
 
 fn calculate_smooth_normals(

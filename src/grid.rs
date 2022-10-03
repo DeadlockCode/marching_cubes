@@ -1,3 +1,5 @@
+use std::f32::consts::PI;
+
 use crate::marching_cubes::march_tables;
 
 use super::*;
@@ -30,6 +32,7 @@ pub fn start() {
         .add_startup_system(spawn_mesh)
 
         .add_system(grid_point_system)
+        .add_system(grid_mesh_system)
         .add_system(camera_system)
 
         .register_inspectable::<Isosurface>()
@@ -78,7 +81,7 @@ fn spawn_mesh(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    let cached_material = materials.add(
+    let shared_material = materials.add(
         StandardMaterial { 
             base_color: Color::BEIGE,
             emissive: Color::BLACK,
@@ -92,16 +95,14 @@ fn spawn_mesh(
     let grid = binding.insert(Name::new("Mesh"));
 
     grid.add_children(|parent| {
+        let positions_vec = marching_cubes::marching_cubes_flat_disjointed(RES, &implicit_function);
+
         for z in 0..RES {
             for y in 0..RES {
                 for x in 0..RES {
-                    let positions = marching_cubes::marching_cubes_flat(1, &|i, j, k| {
-                        let mul = 7.5 / RES as f32;
-                    
-                        let (x, y, z) = (i * mul - 3.7, j * mul - 3.7, k * mul - 3.7); // offset xyz
-                    
-                        (x-2.0)*(x-2.0)*(x+2.0)*(x+2.0) + (y-2.0)*(y-2.0)*(y+2.0)*(y+2.0) + (z-2.0)*(z-2.0)*(z+2.0)*(z+2.0) + 3.0*(x*x*y*y+x*x*z*z+y*y*z*z) + 6.0*x*y*z - 10.0*(x*x+y*y+z*z) + 22.0
-                    });
+                    let idx = x + y * RES + z * RES * RES;
+
+                    let positions = positions_vec[idx].clone();
                 
                     let mut mesh = Mesh::new(bevy::render::render_resource::PrimitiveTopology::TriangleList);
                     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
@@ -109,8 +110,8 @@ fn spawn_mesh(
                 
                     parent.spawn_bundle(PbrBundle {
                         mesh: meshes.add(mesh),
-                        material: cached_material.clone(),
-                        transform: Transform::from_translation(Vec3::new(0.0, 0.0, 0.0)),//Vec3::new(x as f32, y as f32, z as f32) / (RES - 1) as f32 - Vec3::splat(0.5)).with_scale(Vec3::splat(1.0 / (RES - 1) as f32)),
+                        material: shared_material.clone(),
+                        transform: Transform::from_translation(-Vec3::splat(0.5)).with_scale(Vec3::splat(1.0 / RES as f32)),
                         ..Default::default()
                     }).insert(GridMesh{x, y, z})
                     .insert(Name::new("(".to_owned() + &x.to_string() + &", ".to_owned() + &y.to_string() + &", ".to_owned() + &z.to_string() + &")".to_owned()));
@@ -122,20 +123,20 @@ fn spawn_mesh(
 
 }
 
-const RES: u32 = 16;
+const RES: usize = 16;
 
 #[derive(Component)]
 struct GridPoint {
-    x: u32,
-    y: u32,
-    z: u32,
+    x: usize,
+    y: usize,
+    z: usize,
 }
 
 #[derive(Component)]
 struct GridMesh {
-    x: u32,
-    y: u32,
-    z: u32,
+    x: usize,
+    y: usize,
+    z: usize,
 }
 
 fn spawn_cube(
@@ -157,15 +158,29 @@ fn spawn_cube(
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
 
-    commands.spawn_bundle(PbrBundle {
-        mesh: meshes.add(mesh),
-        material: materials.add(StandardMaterial {
+    let shared_mesh = meshes.add(mesh);
+    let shared_material = materials.add(StandardMaterial {
             base_color: Color::DARK_GRAY,
             unlit: true,
             ..Default::default()
-        }),
+        });
+
+    commands.spawn_bundle(PbrBundle {
+        mesh: shared_mesh.clone(),
+        material: shared_material.clone(),
         ..Default::default()
     }).insert(Name::new("Bounary"));
+
+    commands.spawn_bundle(PbrBundle {
+        mesh: shared_mesh.clone(),
+        material: shared_material.clone(),
+        transform: Transform::from_scale(Vec3::splat(1.0 / RES as f32)),
+        visibility: Visibility {
+            is_visible: false,
+        },
+        ..Default::default()
+    }).insert(Name::new("Highlight"))
+    .insert(MeshHighlight);
 }
 
 fn grid_point_system(
@@ -183,8 +198,26 @@ fn grid_point_system(
 
         visibility.is_visible = 
             value.abs().sqrt() * value.signum() <= isosurface.iso_level
-            && (sec * (RES * RES) as f32) as u32 > grid_point.x + grid_point.y * RES + grid_point.z * RES * RES;
+            && (sec * ((RES + 1) * (RES + 1)) as f32) as usize > grid_point.x + grid_point.y * (RES + 1) + grid_point.z * (RES + 1) * (RES + 1);
         transform.look_at(camera_pos, Vec3::Y);
+    }
+}
+
+fn grid_mesh_system(
+    mut grid_meshes: Query<(&mut Visibility, &GridMesh, Without<MeshHighlight>)>,
+    mut mesh_highlight: Query<(&mut Transform, &mut Visibility, With<MeshHighlight>, Without<GridMesh>)>,
+    time: Res<Time>,
+) {
+    let sec = time.seconds_since_startup() as f32 - 4.0;
+    let (mut highlight_transform, mut highlight_visibility, _, _) = mesh_highlight.single_mut();
+
+    for (mut visibility, grid_mesh, _) in grid_meshes.iter_mut() {
+        visibility.is_visible = (sec * RES as f32) as usize > grid_mesh.x + grid_mesh.y * RES + grid_mesh.z * RES * RES;
+        let current = (sec * RES as f32) as usize == grid_mesh.x + grid_mesh.y * RES + grid_mesh.z * RES * RES;
+        if current {
+            highlight_transform.translation = Vec3::new(grid_mesh.x as f32, grid_mesh.y as f32, grid_mesh.z as f32) / (RES - 1) as f32 - Vec3::splat(0.5) + Vec3::splat(0.5) / (RES - 1) as f32;
+            highlight_visibility.is_visible = true;
+        }
     }
 }
 
@@ -194,8 +227,11 @@ struct Isosurface {
     iso_level: f32,
 }
 
+#[derive(Inspectable, Component)]
+struct MeshHighlight;
+
 fn implicit_function(i: f32, j: f32, k: f32) -> f32 {
-    let mul = 7.5 / RES as f32;
+    let mul = 7.5 / (RES + 1) as f32;
 
     let (x, y, z) = (i * mul - 3.7, j * mul - 3.7, k * mul - 3.7);
 
@@ -214,7 +250,7 @@ fn spawn_grid(
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
 
-    let cached_mesh = meshes.add(mesh);
+    let shared_mesh = meshes.add(mesh);
 
     let mut largest = f32::MIN;
     let mut smallest = f32::MAX;
@@ -223,22 +259,22 @@ fn spawn_grid(
     let grid = binding.insert(Name::new("Grid"));
 
     grid.add_children(|parent| {
-        for z in 0..RES {
-            for y in 0..RES {
-                for x in 0..RES {
+        for z in 0..(RES + 1) {
+            for y in 0..(RES + 1) {
+                for x in 0..(RES + 1) {
                     let col = (implicit_function(x as f32, y as f32, z as f32) / 1622.794).max(0.0).sqrt().sqrt();
     
                     largest = largest.max(col);
                     smallest = smallest.min(col);
     
                     parent.spawn_bundle(MaterialMeshBundle {
-                        mesh: cached_mesh.clone(),
+                        mesh: shared_mesh.clone(),
                         material: materials.add(StandardMaterial {
                             base_color: Color::rgb(col, col, col), 
                             unlit: true,
                             ..Default::default()
                         }),
-                        transform: Transform::from_translation(Vec3::new(x as f32, y as f32, z as f32) / (RES - 1) as f32 - Vec3::splat(0.5)).with_scale(Vec3::splat(0.01)),
+                        transform: Transform::from_translation(Vec3::new(x as f32, y as f32, z as f32) / RES as f32 - Vec3::splat(0.5)).with_scale(Vec3::splat(0.01)),
                         ..Default::default()
                     }).insert(GridPoint{x, y, z})
                     .insert(Name::new("(".to_owned() + &x.to_string() + &", ".to_owned() + &y.to_string() + &", ".to_owned() + &z.to_string() + &")".to_owned()));
