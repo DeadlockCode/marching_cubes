@@ -180,7 +180,7 @@ fn spawn_cube(
         },
         ..Default::default()
     }).insert(Name::new("Highlight"))
-    .insert(MeshHighlight);
+    .insert(Highlight);
 }
 
 fn grid_point_system(
@@ -197,25 +197,25 @@ fn grid_point_system(
         let value = implicit_function(grid_point.x as f32, grid_point.y as f32, grid_point.z as f32) / 1622.794;
 
         visibility.is_visible = 
-            value.abs().sqrt() * value.signum() <= isosurface.iso_level
+            value.abs().sqrt().sqrt() * value.signum() <= isosurface.iso_level
             && (sec * ((RES + 1) * (RES + 1)) as f32) as usize > grid_point.x + grid_point.y * (RES + 1) + grid_point.z * (RES + 1) * (RES + 1);
         transform.look_at(camera_pos, Vec3::Y);
     }
 }
 
 fn grid_mesh_system(
-    mut grid_meshes: Query<(&mut Visibility, &GridMesh, Without<MeshHighlight>)>,
-    mut mesh_highlight: Query<(&mut Transform, &mut Visibility, With<MeshHighlight>, Without<GridMesh>)>,
+    mut grid_meshes: Query<(&mut Visibility, &GridMesh, Without<Highlight>)>,
+    mut mesh_highlight: Query<(&mut Transform, &mut Visibility, With<Highlight>, Without<GridMesh>)>,
     time: Res<Time>,
 ) {
     let sec = time.seconds_since_startup() as f32 - 4.0;
     let (mut highlight_transform, mut highlight_visibility, _, _) = mesh_highlight.single_mut();
 
     for (mut visibility, grid_mesh, _) in grid_meshes.iter_mut() {
-        visibility.is_visible = (sec * RES as f32) as usize > grid_mesh.x + grid_mesh.y * RES + grid_mesh.z * RES * RES;
-        let current = (sec * RES as f32) as usize == grid_mesh.x + grid_mesh.y * RES + grid_mesh.z * RES * RES;
+        visibility.is_visible = (sec * (RES * RES / 2) as f32) as usize > grid_mesh.x + grid_mesh.y * RES + grid_mesh.z * RES * RES;
+        let current = (sec * (RES  * RES / 2 ) as f32) as usize == grid_mesh.x + grid_mesh.y * RES + grid_mesh.z * RES * RES;
         if current {
-            highlight_transform.translation = Vec3::new(grid_mesh.x as f32, grid_mesh.y as f32, grid_mesh.z as f32) / (RES - 1) as f32 - Vec3::splat(0.5) + Vec3::splat(0.5) / (RES - 1) as f32;
+            highlight_transform.translation = Vec3::new(grid_mesh.x as f32, grid_mesh.y as f32, grid_mesh.z as f32) / RES as f32 - Vec3::splat(0.5) + Vec3::splat(0.5) / RES as f32;
             highlight_visibility.is_visible = true;
         }
     }
@@ -228,12 +228,12 @@ struct Isosurface {
 }
 
 #[derive(Inspectable, Component)]
-struct MeshHighlight;
+struct Highlight;
 
 fn implicit_function(i: f32, j: f32, k: f32) -> f32 {
-    let mul = 7.5 / (RES + 1) as f32;
+    let mul = 8.0 / (RES + 1) as f32;
 
-    let (x, y, z) = (i * mul - 3.7, j * mul - 3.7, k * mul - 3.7);
+    let (x, y, z) = (i * mul - 4.0, j * mul - 4.0, k * mul - 4.0);
 
     (x-2.0)*(x-2.0)*(x+2.0)*(x+2.0) + (y-2.0)*(y-2.0)*(y+2.0)*(y+2.0) + (z-2.0)*(z-2.0)*(z+2.0)*(z+2.0) + 3.0*(x*x*y*y+x*x*z*z+y*y*z*z) + 6.0*x*y*z - 10.0*(x*x+y*y+z*z) + 22.0
 }
