@@ -1,7 +1,7 @@
 pub mod marching_cubes;
 pub mod surface_nets;
 pub mod showcase;
-pub mod grid;
+pub mod visualization;
 pub mod circle_fan;
 
 pub use bevy::prelude::*;
@@ -17,7 +17,7 @@ const APP: u32 = 1;
 fn main() {
     match APP {
         0 => showcase::start(),
-        1 => grid::start(),
+        1 => visualization::start(),
         _ => return,
     }
 }

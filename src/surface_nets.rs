@@ -15,7 +15,7 @@ pub fn surface_net(
     let grid = coords(axis_length)
         .map(|(x, y, z)| signed_distance_field(x as f32, y as f32, z as f32))
         .collect::<Vec<_>>();
-    let grid_values = &move |x, y, z| {
+    let discrete_scalar_field = &move |x, y, z| {
         unsafe { *grid.get_unchecked(x + y * axis_length + z * axis_length * axis_length) }
     };
 
@@ -25,7 +25,7 @@ pub fn surface_net(
     // Find all vertex positions. Addtionally, create a hashmap from grid
     // position to index.
     for coord in coords(resolution) {
-        if let Some((center, normal)) = find_center(grid_values, coord) {
+        if let Some((center, normal)) = find_center(discrete_scalar_field, coord) {
             grid_to_index.insert(coord, positions.len());
             positions.push(center);
             normals.push(normal);
@@ -34,7 +34,7 @@ pub fn surface_net(
     // Find all triangles, in the form of [index, index, index] triples.
     let mut indices = Vec::new();
     make_all_triangles(
-        grid_values,
+        discrete_scalar_field,
         resolution,
         &grid_to_index,
         &positions,
@@ -79,12 +79,12 @@ const OFFSETS: [(usize, usize); 12] = [
 // simple and easy to implement.
 // Returns: (pos, normal)
 fn find_center(
-    grid_values: &GridSDF,
+    discrete_scalar_field: &GridSDF,
     coord: (usize, usize, usize),
 ) -> Option<([f32; 3], [f32; 3])> {
     let mut values = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
     for (x, value) in values.iter_mut().enumerate() {
-        *value = grid_values(
+        *value = discrete_scalar_field(
             coord.0 + (x & 1),
             coord.1 + ((x >> 1) & 1),
             coord.2 + ((x >> 2) & 1),
@@ -150,18 +150,18 @@ fn find_edge(offset1: usize, offset2: usize, value1: f32, value2: f32) -> Option
 // There's some hellish off-by-one conditions and whatnot that make this code
 // really gross.
 fn make_all_triangles(
-    grid_values: &GridSDF,
+    discrete_scalar_field: &GridSDF,
     resolution: usize,
     grid_to_index: &HashMap<(usize, usize, usize), usize>,
     positions: &[[f32; 3]],
     indices: &mut Vec<u32>,
 ) {
     for coord in coords(resolution) {
-        // TODO: Cache grid_values(coord), it's called three times here.
+        // TODO: Cache discrete_scalar_field(coord), it's called three times here.
         // Do edges parallel with the X axis
         if coord.1 != 0 && coord.2 != 0 {
             make_triangle(
-                grid_values,
+                discrete_scalar_field,
                 grid_to_index,
                 positions,
                 indices,
@@ -174,7 +174,7 @@ fn make_all_triangles(
         // Do edges parallel with the Y axis
         if coord.0 != 0 && coord.2 != 0 {
             make_triangle(
-                grid_values,
+                discrete_scalar_field,
                 grid_to_index,
                 positions,
                 indices,
@@ -187,7 +187,7 @@ fn make_all_triangles(
         // Do edges parallel with the Z axis
         if coord.0 != 0 && coord.1 != 0 {
             make_triangle(
-                grid_values,
+                discrete_scalar_field,
                 grid_to_index,
                 positions,
                 indices,
@@ -201,7 +201,7 @@ fn make_all_triangles(
 }
 
 fn make_triangle(
-    grid_values: &GridSDF,
+    discrete_scalar_field: &GridSDF,
     grid_to_index: &HashMap<(usize, usize, usize), usize>,
     positions: &[[f32; 3]],
     indices: &mut Vec<u32>,
@@ -210,7 +210,7 @@ fn make_triangle(
     axis1: (usize, usize, usize),
     axis2: (usize, usize, usize),
 ) {
-    let face_result = is_face(grid_values, coord, offset);
+    let face_result = is_face(discrete_scalar_field, coord, offset);
     if let FaceResult::NoFace = face_result {
         return;
     }
@@ -297,14 +297,14 @@ enum FaceResult {
 
 // Determine if the sign of the SDF flips between coord and (coord+offset)
 fn is_face(
-    grid_values: &GridSDF,
+    discrete_scalar_field: &GridSDF,
     coord: (usize, usize, usize),
     offset: (usize, usize, usize),
 ) -> FaceResult {
     let other = (coord.0 + offset.0, coord.1 + offset.1, coord.2 + offset.2);
     match (
-        grid_values(coord.0, coord.1, coord.2) < 0.0,
-        grid_values(other.0, other.1, other.2) < 0.0,
+        discrete_scalar_field(coord.0, coord.1, coord.2) < 0.0,
+        discrete_scalar_field(other.0, other.1, other.2) < 0.0,
     ) {
         (true, false) => FaceResult::FacePositive,
         (false, true) => FaceResult::FaceNegative,
