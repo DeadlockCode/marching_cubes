@@ -1,5 +1,3 @@
-use std::f32::consts::PI;
-
 use crate::marching_cubes::march_tables;
 
 use super::*;
@@ -83,19 +81,20 @@ fn spawn_mesh(
 ) {
     let shared_material = materials.add(
         StandardMaterial { 
-            base_color: Color::BEIGE,
+            base_color: Color::ORANGE_RED,
             emissive: Color::BLACK,
             perceptual_roughness: 1.0,
             metallic: 0.0,
             reflectance: 0.0,
+            cull_mode: None,
             ..Default::default()
         });
     
     let mut binding = commands.spawn_bundle(SpatialBundle::default());
-    let grid = binding.insert(Name::new("Mesh"));
+    let entity = binding.insert(Name::new("Mesh"));
 
-    grid.add_children(|parent| {
-        let positions_vec = marching_cubes::marching_cubes_flat_disjointed(RES, &implicit_function);
+    entity.add_children(|parent| {
+        let positions_vec = marching_cubes::marching_cubes_non_interp(RES, &scalar_field);
 
         for z in 0..RES {
             for y in 0..RES {
@@ -194,7 +193,7 @@ fn grid_point_system(
     let sec = time.seconds_since_startup() as f32 - 2.0;
 
     for (mut transform, mut visibility, grid_point) in grid_points.iter_mut() {
-        let value = implicit_function(grid_point.x as f32, grid_point.y as f32, grid_point.z as f32) / 1622.794;
+        let value = scalar_field(grid_point.x as f32, grid_point.y as f32, grid_point.z as f32) / 1622.794;
 
         visibility.is_visible = 
             value.abs().sqrt().sqrt() * value.signum() <= isosurface.iso_level
@@ -212,8 +211,8 @@ fn grid_mesh_system(
     let (mut highlight_transform, mut highlight_visibility, _, _) = mesh_highlight.single_mut();
 
     for (mut visibility, grid_mesh, _) in grid_meshes.iter_mut() {
-        visibility.is_visible = (sec * (RES * RES / 2) as f32) as usize > grid_mesh.x + grid_mesh.y * RES + grid_mesh.z * RES * RES;
-        let current = (sec * (RES  * RES / 2 ) as f32) as usize == grid_mesh.x + grid_mesh.y * RES + grid_mesh.z * RES * RES;
+        visibility.is_visible = (sec * (RES * RES / 4) as f32) as usize > grid_mesh.x + grid_mesh.y * RES + grid_mesh.z * RES * RES;
+        let current = (sec * (RES  * RES / 4) as f32) as usize + 1 == grid_mesh.x + grid_mesh.y * RES + grid_mesh.z * RES * RES;
         if current {
             highlight_transform.translation = Vec3::new(grid_mesh.x as f32, grid_mesh.y as f32, grid_mesh.z as f32) / RES as f32 - Vec3::splat(0.5) + Vec3::splat(0.5) / RES as f32;
             highlight_visibility.is_visible = true;
@@ -230,7 +229,7 @@ struct Isosurface {
 #[derive(Inspectable, Component)]
 struct Highlight;
 
-fn implicit_function(i: f32, j: f32, k: f32) -> f32 {
+fn scalar_field(i: f32, j: f32, k: f32) -> f32 {
     let mul = 8.0 / (RES + 1) as f32;
 
     let (x, y, z) = (i * mul - 4.0, j * mul - 4.0, k * mul - 4.0);
@@ -262,7 +261,7 @@ fn spawn_grid(
         for z in 0..(RES + 1) {
             for y in 0..(RES + 1) {
                 for x in 0..(RES + 1) {
-                    let col = (implicit_function(x as f32, y as f32, z as f32) / 1622.794).max(0.0).sqrt().sqrt();
+                    let col = (scalar_field(x as f32, y as f32, z as f32) / 1622.794).max(0.0).sqrt().sqrt();
     
                     largest = largest.max(col);
                     smallest = smallest.min(col);
