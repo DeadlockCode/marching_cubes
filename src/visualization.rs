@@ -193,7 +193,7 @@ fn grid_point_system(
     let sec = time.seconds_since_startup() as f32 - 2.0;
 
     for (mut transform, mut visibility, grid_point) in grid_points.iter_mut() {
-        let value = scalar_field(grid_point.x as f32, grid_point.y as f32, grid_point.z as f32) / 1622.794;
+        let value = scalar_field(grid_point.x as f32, grid_point.y as f32, grid_point.z as f32) / 2239.6206;
 
         visibility.is_visible = 
             value.abs().sqrt().sqrt() * value.signum() <= isosurface.iso_level
@@ -261,7 +261,7 @@ fn spawn_grid(
         for z in 0..(RES + 1) {
             for y in 0..(RES + 1) {
                 for x in 0..(RES + 1) {
-                    let col = (scalar_field(x as f32, y as f32, z as f32) / 1622.794).max(0.0).sqrt().sqrt();
+                    let col = (scalar_field(x as f32, y as f32, z as f32) / 2239.6206).max(0.0).sqrt().sqrt();
     
                     largest = largest.max(col);
                     smallest = smallest.min(col);
