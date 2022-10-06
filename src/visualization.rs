@@ -94,7 +94,7 @@ fn spawn_mesh(
     let entity = binding.insert(Name::new("Mesh"));
 
     entity.add_children(|parent| {
-        let positions_vec = marching_cubes::marching_cubes_non_interp(RES, &scalar_field);
+        let positions_vec = marching_cubes::marching_cubes_flat_disjointed(RES, &SCALAR_FIELD);
 
         for z in 0..RES {
             for y in 0..RES {
@@ -193,7 +193,7 @@ fn grid_point_system(
     let sec = time.seconds_since_startup() as f32 - 2.0;
 
     for (mut transform, mut visibility, grid_point) in grid_points.iter_mut() {
-        let value = scalar_field(grid_point.x as f32, grid_point.y as f32, grid_point.z as f32) / 2239.6206;
+        let value = SCALAR_FIELD(grid_point.x as f32, grid_point.y as f32, grid_point.z as f32);
 
         visibility.is_visible = 
             value.abs().sqrt().sqrt() * value.signum() <= isosurface.iso_level
@@ -230,12 +230,22 @@ struct Isosurface {
 struct Highlight;
 
 fn scalar_field(i: f32, j: f32, k: f32) -> f32 {
-    let mul = 8.0 / (RES + 1) as f32;
+    let mul = (128.0/17.0) / RES as f32;
 
     let (x, y, z) = (i * mul - 4.0, j * mul - 4.0, k * mul - 4.0);
 
-    (x-2.0)*(x-2.0)*(x+2.0)*(x+2.0) + (y-2.0)*(y-2.0)*(y+2.0)*(y+2.0) + (z-2.0)*(z-2.0)*(z+2.0)*(z+2.0) + 3.0*(x*x*y*y+x*x*z*z+y*y*z*z) + 6.0*x*y*z - 10.0*(x*x+y*y+z*z) + 22.0
+    ((x-2.0)*(x-2.0)*(x+2.0)*(x+2.0) + (y-2.0)*(y-2.0)*(y+2.0)*(y+2.0) + (z-2.0)*(z-2.0)*(z+2.0)*(z+2.0) + 3.0*(x*x*y*y+x*x*z*z+y*y*z*z) + 6.0*x*y*z - 10.0*(x*x+y*y+z*z) + 22.0)  / 2239.6206
 }
+
+fn sphere(i: f32, j: f32, k: f32) -> f32 {
+    let mul = 1.0 / RES as f32;
+
+    let (x, y, z) = (i * mul - 0.5, j * mul - 0.5, k * mul - 0.5);
+
+    x*x + y*y + z*z - 0.2
+}
+
+const SCALAR_FIELD: &dyn Fn(f32, f32, f32) -> f32 = &sphere;
 
 fn spawn_grid(
     mut commands: Commands,
@@ -261,7 +271,7 @@ fn spawn_grid(
         for z in 0..(RES + 1) {
             for y in 0..(RES + 1) {
                 for x in 0..(RES + 1) {
-                    let col = (scalar_field(x as f32, y as f32, z as f32) / 2239.6206).max(0.0).sqrt().sqrt();
+                    let col = (SCALAR_FIELD(x as f32, y as f32, z as f32)).max(0.0).sqrt().sqrt();
     
                     largest = largest.max(col);
                     smallest = smallest.min(col);
