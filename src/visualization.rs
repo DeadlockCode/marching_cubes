@@ -94,7 +94,7 @@ fn spawn_mesh(
     let entity = binding.insert(Name::new("Mesh"));
 
     entity.add_children(|parent| {
-        let positions_vec = marching_cubes::marching_cubes_flat_disjointed(RES, &SCALAR_FIELD);
+        let positions_vec = marching_cubes::marching_cubes_disjointed(RES, &SCALAR_FIELD);
 
         for z in 0..RES {
             for y in 0..RES {
