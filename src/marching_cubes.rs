@@ -46,9 +46,11 @@ pub fn marching_cubes(
     (positions, normals, indices)
 }
 
-pub fn marching_cubes_flat(
+pub fn marching_cubes_parameterized(
     resolution: usize,
     scalar_field: &SDF,
+    interpolate: f32,
+    normal_weight: f32,
 ) -> Vec<[f32; 3]> {
     let sw = Stopwatch::start_new();
 
@@ -82,7 +84,7 @@ pub fn marching_cubes_flat(
     positions
 }
 
-pub fn marching_cubes_flat_disjointed(
+pub fn marching_cubes_disjointed(
     resolution: usize,
     scalar_field: &SDF,
 ) -> Vec<Vec<[f32; 3]>> {
