@@ -3,12 +3,12 @@ pub mod march_tables;
 use bevy::{prelude::*, utils::HashMap};
 use stopwatch::Stopwatch;
 
-type SDF = dyn Fn(f32, f32, f32) -> f32;
-type GridSDF = dyn Fn(usize, usize, usize) -> f32;
+type ScalarField = dyn Fn(f32, f32, f32) -> f32;
+type DiscreteScalarField = dyn Fn(usize, usize, usize) -> f32;
 
 pub fn marching_cubes(
     resolution: usize,
-    scalar_field: &SDF,
+    scalar_field: &ScalarField,
 ) -> (Vec<[f32; 3]>, Vec<[f32; 3]>, Vec<u32>) {
     let sw = Stopwatch::start_new();
 
@@ -48,7 +48,7 @@ pub fn marching_cubes(
 
 pub fn marching_cubes_parameterized(
     resolution: usize,
-    scalar_field: &SDF,
+    scalar_field: &ScalarField,
     interpolate: f32,
     normal_weight: f32,
 ) -> Vec<[f32; 3]> {
@@ -86,7 +86,7 @@ pub fn marching_cubes_parameterized(
 
 pub fn marching_cubes_disjointed(
     resolution: usize,
-    scalar_field: &SDF,
+    scalar_field: &ScalarField,
 ) -> Vec<Vec<[f32; 3]>> {
     let sw = Stopwatch::start_new();
 
@@ -126,7 +126,7 @@ pub fn marching_cubes_disjointed(
 
 pub fn marching_cubes_non_interp(
     resolution: usize,
-    scalar_field: &SDF,
+    scalar_field: &ScalarField,
 ) -> Vec<Vec<[f32; 3]>> {
     let sw = Stopwatch::start_new();
 
@@ -202,7 +202,7 @@ fn calculate_smooth_normals(
 }
 
 fn make_vertex(
-    discrete_scalar_field: &GridSDF,
+    discrete_scalar_field: &DiscreteScalarField,
     positions: &mut Vec<[f32; 3]>,
     edge_to_index: &mut HashMap<[usize; 3], u32>,
     indices: &mut Vec<u32>,
@@ -235,7 +235,7 @@ fn make_vertex(
 }
 
 fn make_vertex_flat(
-    discrete_scalar_field: &GridSDF,
+    discrete_scalar_field: &DiscreteScalarField,
     positions: &mut Vec<[f32; 3]>,
     coord: (usize, usize, usize),
     edge_index: usize,
@@ -273,7 +273,7 @@ fn make_vertex_non_interp(
 }
 
 fn get_triangulation(
-    discrete_scalar_field: &GridSDF,
+    discrete_scalar_field: &DiscreteScalarField,
     (x, y, z): (usize, usize, usize),
 ) -> [usize; 16] {
     let mut triangulation_index = 0;

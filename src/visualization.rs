@@ -5,6 +5,21 @@ use super::*;
 use bevy::{render::mesh::Indices, log::LogSettings};
 use bevy_inspector_egui::{WorldInspectorPlugin, Inspectable, RegisterInspectable};
 
+const RES: usize = 16;
+
+struct Timings {
+    start: f32,
+    grid_points_finish: f32,
+    grid_mesh_finish: f32,
+    mesh_interpolation: f32,
+    mesh_normalization: f32,
+}
+
+//const TIMINGS: Timings = Timings {
+
+//}
+
+
 pub fn start() {
     App::new()
         .insert_resource(Msaa { samples: 4 })
@@ -121,8 +136,6 @@ fn spawn_mesh(
 
 
 }
-
-const RES: usize = 16;
 
 #[derive(Component)]
 struct GridPoint {
