@@ -4,13 +4,12 @@ pub mod showcase;
 pub mod visualization;
 pub mod circle_fan;
 
+use std::f32::consts::PI;
+
 pub use bevy::prelude::*;
 
 pub const WIDTH: f32 = 1280.0;
 pub const HEIGHT: f32 = 720.0;
-
-pub const MOVE_SPEED: f32 = 30.0;
-pub const SENSITIVITY: f32 = 1.0;
 
 const APP: u32 = 1;
 
@@ -22,7 +21,24 @@ fn main() {
     }
 }
 
-fn spawn_light(
+fn spawn_point_light(
+    mut commands: Commands,
+) {
+    commands.spawn_bundle(PointLightBundle {
+        point_light: PointLight {
+            color: Color::WHITE,
+            intensity: 50.0,
+            range: 5.0,
+            radius: 5.0,
+            ..Default::default()
+        },
+        transform: Transform::from_xyz(0.75, 1.0, 1.0),
+        ..Default::default()
+    })
+    .insert(Name::new("Light"));
+}
+
+fn spawn_directional_light(
     mut commands: Commands,
 ) {
     commands.spawn_bundle(DirectionalLightBundle {
@@ -35,4 +51,30 @@ fn spawn_light(
         ..Default::default()
     })
     .insert(Name::new("Light"));
+}
+
+fn camera_system (
+    mut cameras: Query<(&mut Transform, With<Camera3d>)>,
+    time: Res<Time>,
+) {
+    let mut camera = cameras.single_mut().0;
+
+    let t = time.seconds_since_startup() as f32 * 2.0 * PI / 60.0;
+
+    camera.translation = Vec3::new(t.cos(), 0.5, t.sin()) * 2.0;
+    camera.look_at(Vec3::new(0.0, -0.1, 0.0), Vec3::Y)
+}
+
+fn spawn_camera(mut commands: Commands) {
+    commands.spawn_bundle(Camera3dBundle {
+        transform: Transform::from_xyz(0.0, 0.0, 0.0),
+        ..Default::default()
+    })
+    .insert(Name::new("Camera"));
+}
+
+fn coords(size: usize) -> impl Iterator<Item = (usize, usize, usize)> {
+    (0..size)
+        .flat_map(move |x| (0..size).map(move |y| (x, y)))
+        .flat_map(move |(x, y)| (0..size).map(move |z| (x, y, z)))
 }

@@ -31,7 +31,7 @@ pub fn surface_net(
             normals.push(normal);
         }
     }
-    // Find all triangles, in the form of [index, index, index] triples.
+    
     let mut indices = Vec::new();
     make_all_triangles(
         discrete_scalar_field,
@@ -40,44 +40,32 @@ pub fn surface_net(
         &positions,
         &mut indices,
     );
+
     println!("Surface nets took: {}ms", sw.elapsed_ms());
     (positions, normals, indices)
 }
 
-// Iterator over all integer points in a 3d cube from 0 to size
-fn coords(size: usize) -> impl Iterator<Item = (usize, usize, usize)> {
-    (0..size)
-        .flat_map(move |x| (0..size).map(move |y| (x, y)))
-        .flat_map(move |(x, y)| (0..size).map(move |z| (x, y, z)))
+fn coords(resolution: usize) -> impl Iterator<Item = (usize, usize, usize)> {
+    (0..resolution)
+        .flat_map(move |x| (0..resolution).map(move |y| (x, y)))
+        .flat_map(move |(x, y)| (0..resolution).map(move |z| (x, y, z)))
 }
 
-// List of all edges in a cube.
 const OFFSETS: [(usize, usize); 12] = [
-    (0b000, 0b001), // ((0, 0, 0), (0, 0, 1)),
-    (0b000, 0b010), // ((0, 0, 0), (0, 1, 0)),
-    (0b000, 0b100), // ((0, 0, 0), (1, 0, 0)),
-    (0b001, 0b011), // ((0, 0, 1), (0, 1, 1)),
-    (0b001, 0b101), // ((0, 0, 1), (1, 0, 1)),
-    (0b010, 0b011), // ((0, 1, 0), (0, 1, 1)),
-    (0b010, 0b110), // ((0, 1, 0), (1, 1, 0)),
-    (0b011, 0b111), // ((0, 1, 1), (1, 1, 1)),
-    (0b100, 0b101), // ((1, 0, 0), (1, 0, 1)),
-    (0b100, 0b110), // ((1, 0, 0), (1, 1, 0)),
-    (0b101, 0b111), // ((1, 0, 1), (1, 1, 1)),
-    (0b110, 0b111), // ((1, 1, 0), (1, 1, 1)),
+    (0b000, 0b001),
+    (0b000, 0b010),
+    (0b000, 0b100),
+    (0b001, 0b011),
+    (0b001, 0b101),
+    (0b010, 0b011),
+    (0b010, 0b110),
+    (0b011, 0b111),
+    (0b100, 0b101),
+    (0b100, 0b110),
+    (0b101, 0b111),
+    (0b110, 0b111),
 ];
 
-// Find the vertex position for this grid: it will be somewhere within the cube
-// with coordinates [0,1].
-// How? First, for each edge in the cube, find if that edge crosses the SDF
-// boundary - i.e. one point is positive, one point is negative.
-// Second, calculate the "weighted midpoint" between these points (see
-// find_edge).
-// Third, take the average of all these points for all edges (for edges that
-// have crossings).
-// There are more complicated and better algorithms than this, but this is
-// simple and easy to implement.
-// Returns: (pos, normal)
 fn find_center(
     discrete_scalar_field: &GridSDF,
     coord: (usize, usize, usize),
@@ -85,9 +73,9 @@ fn find_center(
     let mut values = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
     for (x, value) in values.iter_mut().enumerate() {
         *value = discrete_scalar_field(
-            coord.0 + (x & 1),
+            coord.0 + ((x >> 2) & 1),
             coord.1 + ((x >> 1) & 1),
-            coord.2 + ((x >> 2) & 1),
+            coord.2 + ((x >> 0) & 1),
         );
     }
     let edges = OFFSETS.iter().filter_map(|&(offset1, offset2)| {
@@ -104,12 +92,9 @@ fn find_center(
     if count == 0 {
         None
     } else {
-        let normal_x = (values[0b001] + values[0b011] + values[0b101] + values[0b111])
-            - (values[0b000] + values[0b010] + values[0b100] + values[0b110]);
-        let normal_y = (values[0b010] + values[0b011] + values[0b110] + values[0b111])
-            - (values[0b000] + values[0b001] + values[0b100] + values[0b101]);
-        let normal_z = (values[0b100] + values[0b101] + values[0b110] + values[0b111])
-            - (values[0b000] + values[0b001] + values[0b010] + values[0b011]);
+        let normal_x = (values[0b100] + values[0b101] + values[0b110] + values[0b111]) - (values[0b000] + values[0b001] + values[0b010] + values[0b011]);
+        let normal_y = (values[0b010] + values[0b011] + values[0b110] + values[0b111]) - (values[0b000] + values[0b001] + values[0b100] + values[0b101]);
+        let normal_z = (values[0b001] + values[0b011] + values[0b101] + values[0b111]) - (values[0b000] + values[0b010] + values[0b100] + values[0b110]);
         let normal_len = (normal_x * normal_x + normal_y * normal_y + normal_z * normal_z).sqrt();
         Some((
             [
@@ -136,9 +121,9 @@ fn find_edge(offset1: usize, offset2: usize, value1: f32, value2: f32) -> Option
     }
     let interp = value1 / (value1 - value2);
     let point = [
-        (offset1 & 1) as f32 * (1.0 - interp) + (offset2 & 1) as f32 * interp,
-        ((offset1 >> 1) & 1) as f32 * (1.0 - interp) + ((offset2 >> 1) & 1) as f32 * interp,
         ((offset1 >> 2) & 1) as f32 * (1.0 - interp) + ((offset2 >> 2) & 1) as f32 * interp,
+        ((offset1 >> 1) & 1) as f32 * (1.0 - interp) + ((offset2 >> 1) & 1) as f32 * interp,
+        ((offset1 >> 0) & 1) as f32 * (1.0 - interp) + ((offset2 >> 0) & 1) as f32 * interp,
     ];
     Some(point)
 }

@@ -15,9 +15,11 @@ opt-level = 3
 bevy = "0.8.1"
 bevy-inspector-egui = "0.13.0"
 bevy_prototype_debug_lines = { version = "0.8", features = ["3d"] }
-noise = "0.7.0"
+noise = "0.8.1"
 
 stopwatch = "0.0.7"
+
+rand = "0.8.5"
 
 [workspace]
 resolver = "2"
