@@ -547,13 +547,13 @@ pub const CORNER_INDEX_B_FROM_EDGE: [usize; 12] = [
     7
 ];
 
-pub const POINT_OFFSETS: [[usize; 3]; 8] = [
-    [0, 0, 0],
-    [0, 0, 1],
-    [1, 0, 1],
-    [1, 0, 0],
-    [0, 1, 0],
-    [0, 1, 1],
-    [1, 1, 1],
-    [1, 1, 0],
+pub const POINT_OFFSETS: [(usize, usize, usize); 8] = [
+    (0, 0, 0),
+    (0, 0, 1),
+    (1, 0, 1),
+    (1, 0, 0),
+    (0, 1, 0),
+    (0, 1, 1),
+    (1, 1, 1),
+    (1, 1, 0),
 ];

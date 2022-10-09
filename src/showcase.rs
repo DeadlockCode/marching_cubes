@@ -3,6 +3,9 @@ use super::*;
 use bevy::{input::mouse::MouseMotion, render::{settings::{WgpuSettings, WgpuFeatures}, mesh::Indices}, pbr::wireframe::{WireframePlugin, WireframeConfig}, log::LogSettings};
 use bevy_inspector_egui::WorldInspectorPlugin;
 
+pub const MOVE_SPEED: f32 = 30.0;
+pub const SENSITIVITY: f32 = 1.0;
+
 pub fn start() {
     App::new()
         .insert_resource(WgpuSettings {
@@ -28,7 +31,7 @@ pub fn start() {
         .add_startup_system(spawn_camera)
         .add_startup_system(surface_nets_mesh)
         .add_startup_system(marching_cubes_mesh)
-        .add_startup_system(spawn_light)
+        .add_startup_system(spawn_directional_light)
         .add_system(update_camera)
         .add_system(update_surface_nets)
         .run();
@@ -94,7 +97,7 @@ fn update_surface_nets(
 
         let my_time = (time.seconds_since_startup().cos() as f32 + 1.0) * 16.0;
 
-        let resolution = RESOLUTION - my_time as usize;
+        let resolution = RES - my_time as usize;
 
         transform.scale = Vec3::splat(32.0 / resolution as f32);
 
@@ -153,13 +156,12 @@ impl Default for SurfaceNetBundle {
     }
 }
 
-const RESOLUTION: usize = 32;
+const RES: usize = 32;
 
 fn implicit_function(i: f32, j: f32, k: f32) -> f32 {
-    let res = RESOLUTION as f32 * 0.5;
-    let mul = 3.7 / res;
+    let mul = (128.0/17.0) / RES as f32;
 
-    let (x, y, z) = ((i - res) * mul, (j - res) * mul, (k - res) * mul);
+    let (x, y, z) = (i * mul - 4.0, j * mul - 4.0, k * mul - 4.0);
 
     (x-2.0)*(x-2.0)*(x+2.0)*(x+2.0) + (y-2.0)*(y-2.0)*(y+2.0)*(y+2.0) + (z-2.0)*(z-2.0)*(z+2.0)*(z+2.0) + 3.0*(x*x*y*y+x*x*z*z+y*y*z*z) + 6.0*x*y*z - 10.0*(x*x+y*y+z*z) + 22.0
 }
@@ -172,7 +174,7 @@ fn surface_nets_mesh(
 ) {
     wireframe_config.global = true;
 
-    let (positions, normals, indices) = surface_nets::surface_net(RESOLUTION, &implicit_function);
+    let (positions, normals, indices) = surface_nets::surface_net(RES, &implicit_function);
 
     let mut mesh = Mesh::new(bevy::render::render_resource::PrimitiveTopology::TriangleList);
     mesh.set_indices(Some(Indices::U32(indices)));
@@ -182,7 +184,7 @@ fn surface_nets_mesh(
     commands.spawn_bundle(SurfaceNetBundle {
         mesh: meshes.add(mesh),
         material: materials.add(Color::rgb(0.4, 0.7, 1.0).into()),
-        transform: Transform::from_translation(Vec3::new(-(RESOLUTION as f32), 0.0, 0.0)),
+        transform: Transform::from_translation(Vec3::new(-(RES as f32), 0.0, 0.0)),
         ..Default::default()
     });
 }
@@ -195,7 +197,7 @@ pub fn marching_cubes_mesh(
 ) {
     wireframe_config.global = true;
 
-    let (positions, normals, indices) = marching_cubes::marching_cubes(RESOLUTION, &implicit_function);
+    let (positions, normals, indices) = marching_cubes::marching_cubes(RES, &implicit_function);
 
     let mut mesh = Mesh::new(bevy::render::render_resource::PrimitiveTopology::TriangleList);
     mesh.set_indices(Some(Indices::U32(indices)));
