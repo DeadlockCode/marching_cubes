@@ -279,7 +279,7 @@ fn grid_point_system(
         let value = SCALAR_FIELD(grid_point.x as f32, grid_point.y as f32, grid_point.z as f32);
 
         visibility.is_visible = 
-            value.abs().sqrt().sqrt() * value.signum() <= isosurface.isolevel
+            value.abs().sqrt() * value.signum() <= isosurface.isolevel
             && (smoothstep(t) * ((RES + 1) * (RES + 1) * (RES + 1)) as f32) as usize > grid_point.x + grid_point.y * (RES + 1) + grid_point.z * (RES + 1) * (RES + 1);
         transform.look_at(camera_pos, Vec3::Y);
     }
