@@ -66,6 +66,7 @@ struct GridMesh {
 struct Isosurface {
     #[inspectable()]
     isolevel: f32,
+    max_value: f32,
 }
 
 #[derive(Inspectable, Component)]
@@ -243,6 +244,7 @@ fn spawn_grid_points(
 
     commands.spawn().insert(Isosurface {
         isolevel: 1.0,
+        max_value: largest,
     }).insert(Name::new("Isosurface"));
 
     println!("min: {}, max: {}", smallest, largest);
@@ -276,7 +278,7 @@ fn grid_point_system(
     let t = TIMINGS.get_time_in_stage(Stage::ShowGridPoints, time.seconds_since_startup() as f32);
 
     for (mut transform, mut visibility, grid_point) in grid_points.iter_mut() {
-        let value = SCALAR_FIELD(grid_point.x as f32, grid_point.y as f32, grid_point.z as f32);
+        let value = SCALAR_FIELD(grid_point.x as f32, grid_point.y as f32, grid_point.z as f32) / isosurface.max_value;
 
         visibility.is_visible = 
             value.abs().sqrt() * value.signum() <= isosurface.isolevel
