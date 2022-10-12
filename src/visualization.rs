@@ -103,7 +103,7 @@ fn smoothstep(t: f32) -> f32 {
 pub fn start() {
     App::new()
         .insert_resource(Msaa { samples: 4 })
-        .insert_resource(ClearColor(Color::rgb_linear(0.01, 0.01, 0.01)))
+        .insert_resource(ClearColor(Color::rgb_u8(20, 20, 20)))
         .insert_resource(WindowDescriptor {
             width: WIDTH,
             height: HEIGHT,
