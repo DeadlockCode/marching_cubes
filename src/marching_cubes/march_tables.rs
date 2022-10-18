@@ -517,37 +517,22 @@ pub const TRIANGULATIONS: [[usize; 16]; 256] = [
     [ INV, INV, INV, INV, INV, INV, INV, INV, INV, INV, INV, INV, INV, INV, INV, INV ]
 ];
 
-pub const CORNER_INDEX_A_FROM_EDGE: [usize; 12] = [
-    0,
-    1,
-    2,
-    3,
-    4,
-    5,
-    6,
-    7,
-    0,
-    1,
-    2,
-    3
+pub const EDGES: [(usize, usize); 12] = [
+    (0, 1),
+    (1, 2),
+    (2, 3),
+    (3, 0),
+    (4, 5),
+    (5, 6),
+    (6, 7),
+    (7, 4),
+    (0, 4),
+    (1, 5),
+    (2, 6),
+    (3, 7)
 ];
 
-pub const CORNER_INDEX_B_FROM_EDGE: [usize; 12] = [
-    1,
-    2,
-    3,
-    0,
-    5,
-    6,
-    7,
-    4,
-    4,
-    5,
-    6,
-    7
-];
-
-pub const POINT_OFFSETS: [(usize, usize, usize); 8] = [
+pub const POINTS: [(usize, usize, usize); 8] = [
     (0, 0, 0),
     (0, 0, 1),
     (1, 0, 1),

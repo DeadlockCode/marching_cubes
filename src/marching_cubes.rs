@@ -19,7 +19,7 @@ pub fn marching_cubes(
         .map(|(x, y, z)| scalar_field(x as f32, y as f32, z as f32))
         .collect::<Vec<_>>();
     let discrete_scalar_field = &move |x, y, z| {
-        unsafe { *grid.get_unchecked(x + y * axis_length + z * axis_length * axis_length) }
+        grid[x + y * axis_length + z * axis_length * axis_length]
     };
 
     let mut positions = Vec::<[f32; 3]>::new();
@@ -142,8 +142,10 @@ fn make_vertex(
     (x, y, z): (usize, usize, usize),
     edge_index: usize,
 ) {
-    let (x0, y0, z0) = march_tables::POINT_OFFSETS[march_tables::CORNER_INDEX_A_FROM_EDGE[edge_index]];
-    let (x1, y1, z1) = march_tables::POINT_OFFSETS[march_tables::CORNER_INDEX_B_FROM_EDGE[edge_index]];
+    let point_index = march_tables::EDGES[edge_index];
+
+    let (x0, y0, z0) = march_tables::POINTS[point_index.0];
+    let (x1, y1, z1) = march_tables::POINTS[point_index.1];
 
     let edge = (x * 2 + x0 + x1, y * 2 + y0 + y1, z * 2 + z0 + z1);
 
@@ -174,8 +176,10 @@ fn make_vertex_interpolation(
     edge_index: usize,
     interpolate: f32,
 ) {
-    let (x0, y0, z0) = march_tables::POINT_OFFSETS[march_tables::CORNER_INDEX_A_FROM_EDGE[edge_index]];
-    let (x1, y1, z1) = march_tables::POINT_OFFSETS[march_tables::CORNER_INDEX_B_FROM_EDGE[edge_index]];
+    let point_index = march_tables::EDGES[edge_index];
+
+    let (x0, y0, z0) = march_tables::POINTS[point_index.0];
+    let (x1, y1, z1) = march_tables::POINTS[point_index.1];
 
     let pos_a: Vec3 = Vec3::new((x + x0) as f32, (y + y0) as f32, (z + z0) as f32);
     let pos_b: Vec3 = Vec3::new((x + x1) as f32, (y + y1) as f32, (z + z1) as f32);
