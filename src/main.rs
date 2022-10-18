@@ -1,8 +1,10 @@
 pub mod marching_cubes;
 pub mod surface_nets;
 pub mod showcase;
-pub mod visualization;
+pub mod visualization_of_marching_cubes_full;
+pub mod visualization_of_marching_cubes_zoom;
 pub mod circle_fan;
+pub mod visualization_helper;
 
 use std::f32::consts::PI;
 
@@ -16,7 +18,7 @@ const APP: u32 = 1;
 fn main() {
     match APP {
         0 => showcase::start(),
-        1 => visualization::start(),
+        1 => visualization_of_marching_cubes_full::start(),
         _ => return,
     }
 }
