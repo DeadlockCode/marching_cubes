@@ -50,17 +50,17 @@ pub fn start() {
         .add_startup_system(spawn_boundary_cube)
 
         .add_startup_system(spawn_grid_points)
-        .add_system(grid_point_system)
+        //.add_system(grid_point_system)
 
-        .add_startup_system(spawn_grid_mesh)
-        .add_system(grid_mesh_system)
+        //.add_startup_system(spawn_grid_mesh)
+        //.add_system(grid_mesh_system)
 
-        .add_startup_system(spawn_mesh_holder)
-        .add_system(interpolate_mesh_system)
+        //.add_startup_system(spawn_mesh_holder)
+        //.add_system(interpolate_mesh_system)
 
-        .add_system(look_at_camera_system)
+        //.add_system(look_at_camera_system)
 
-        .register_inspectable::<Isosurface>()
+        //.register_inspectable::<Isosurface>()
         .run();
 }
 
@@ -80,9 +80,9 @@ fn spawn_grid_points(
     let shared_mesh = meshes.add(mesh);
 
     let mut binding = commands.spawn_bundle(SpatialBundle::default());
-    let grid = binding.insert(Name::new("Grid"));´
+    let grid = binding.insert(Name::new("Grid"));
 
-    let largest = f32::MIN;
+    let mut largest = f32::MIN;
 
     let points = coords(2)
         .map(|(x, y, z)| {
@@ -93,16 +93,16 @@ fn spawn_grid_points(
             val
         })
         .collect::<Vec<_>>();
-    let discrete_scalar_field = &move |x, y, z| {
+    let discrete_scalar_field = &move |x, y, z| -> f32 {
         points[x + y * 2 + z * 4] / largest
     };
 
     //let mesh = meshtext::MeshGenerator::new(font)
 
     grid.add_children(|parent| {
-        for z in 0..2 {
-            for y in 0..2 {
-                for x in 0..2 {
+        for z in 0..2usize {
+            for y in 0..2usize {
+                for x in 0..2usize {
                     let col = (discrete_scalar_field(x, y, z)).max(0.0).sqrt();
     
                     parent.spawn_bundle(MaterialMeshBundle {
@@ -114,19 +114,11 @@ fn spawn_grid_points(
                         }),
                         transform: Transform::from_translation(Vec3::new(x as f32, y as f32, z as f32) - Vec3::splat(0.5)).with_scale(Vec3::splat(0.01)),
                         ..Default::default()
-                    }).insert(GridPoint{x, y, z})
+                    })
                     .insert(LookAtCamera)
                     .insert(Name::new("(".to_owned() + &x.to_string() + &", ".to_owned() + &y.to_string() + &", ".to_owned() + &z.to_string() + &")".to_owned()));
                 }
             }
         }
     });
-
-
-    commands.spawn().insert(Isosurface {
-        isolevel: 1.0,
-        max_value: largest,
-    }).insert(Name::new("Isosurface"));
-
-    println!("min: {}, max: {}", smallest, largest);
 }

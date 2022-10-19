@@ -1,7 +1,10 @@
+use crate::{normal_material::NormalMaterial, cube_sphere::spawn_cube_sphere};
+
 use super::*;
 
 use bevy::{input::mouse::MouseMotion, render::{settings::{WgpuSettings, WgpuFeatures}, mesh::Indices}, pbr::wireframe::{WireframePlugin, WireframeConfig}, log::LogSettings};
 use bevy_inspector_egui::WorldInspectorPlugin;
+use noise::{NoiseFn, Perlin, Fbm};
 
 pub const MOVE_SPEED: f32 = 30.0;
 pub const SENSITIVITY: f32 = 1.0;
@@ -28,12 +31,16 @@ pub fn start() {
         .add_plugins(DefaultPlugins)
         .add_plugin(WorldInspectorPlugin::new())
         .add_plugin(WireframePlugin)
+
+        .add_plugin(MaterialPlugin::<NormalMaterial>::default())
+
         .add_startup_system(spawn_camera)
-        .add_startup_system(surface_nets_mesh)
+        //.add_startup_system(surface_nets_mesh)
         .add_startup_system(marching_cubes_mesh)
+
         .add_startup_system(spawn_directional_light)
         .add_system(update_camera)
-        .add_system(update_surface_nets)
+        //.add_system(update_surface_nets)
         .run();
 }
 
@@ -128,34 +135,9 @@ fn update_surface_nets(
 }
 
 #[derive(Component)]
-struct SurfaceNets {
-}
+struct SurfaceNets;
 
-#[derive(Bundle)]
-struct SurfaceNetBundle {
-    pub mesh: Handle<Mesh>,
-    pub material: Handle<StandardMaterial>,
-    pub transform: Transform,
-    pub global_transform: GlobalTransform,
-    pub visibility: Visibility,
-    pub computed_visibility: ComputedVisibility,
-    pub surface_nets: SurfaceNets,
-}
-
-impl Default for SurfaceNetBundle {
-    fn default() -> Self {
-        Self {
-            mesh: Default::default(),
-            material: Default::default(),
-            transform: Default::default(),
-            global_transform: Default::default(),
-            visibility: Default::default(),
-            computed_visibility: Default::default(),
-            surface_nets: SurfaceNets {},
-        }
-    }
-}
-
+const CHUNK_RES: usize = 8;
 const RES: usize = 32;
 
 fn implicit_function(i: f32, j: f32, k: f32) -> f32 {
@@ -181,32 +163,55 @@ fn surface_nets_mesh(
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
 
-    commands.spawn_bundle(SurfaceNetBundle {
+    commands.spawn_bundle(MaterialMeshBundle {
         mesh: meshes.add(mesh),
         material: materials.add(Color::rgb(0.4, 0.7, 1.0).into()),
         transform: Transform::from_translation(Vec3::new(-(RES as f32), 0.0, 0.0)),
         ..Default::default()
-    });
+    }).insert(SurfaceNets);
 }
 
 pub fn marching_cubes_mesh(
     mut commands: Commands,
     mut wireframe_config: ResMut<WireframeConfig>,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut materials: ResMut<Assets<NormalMaterial>>,
 ) {
-    wireframe_config.global = true;
+    wireframe_config.global = false;
 
-    let (positions, normals, indices) = marching_cubes::marching_cubes(RES, &implicit_function);
+    let noise_func = Perlin::default();
 
-    let mut mesh = Mesh::new(bevy::render::render_resource::PrimitiveTopology::TriangleList);
-    mesh.set_indices(Some(Indices::U32(indices)));
-    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
-    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
-
-    commands.spawn_bundle(PbrBundle {
-        mesh: meshes.add(mesh),
-        material: materials.add(Color::rgb(0.4, 0.7, 1.0).into()),
+    commands.spawn_bundle(SpatialBundle {
         ..Default::default()
+    }).insert(Name::new("World"))
+    .with_children(|builder| {
+        for cz in 0..CHUNK_RES {
+            for cy in 0..CHUNK_RES {
+                for cx in 0..CHUNK_RES {
+
+                    let scalar_field = move |x: f32, y: f32, z: f32| -> f32 {
+                        let scale = 1.0 / RES as f64;
+                        noise_func.get([x as f64 * scale + cx as f64, y as f64 * scale + cy as f64, z as f64 * scale + cz as f64]) as f32
+                    };
+
+                    let (positions, normals, indices) = marching_cubes::marching_cubes(RES, &scalar_field);
+    
+                    let mut mesh = Mesh::new(bevy::render::render_resource::PrimitiveTopology::TriangleList);
+                    mesh.set_indices(Some(Indices::U32(indices)));
+                    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+                    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+    
+                    builder.spawn_bundle(MaterialMeshBundle {
+                        mesh: meshes.add(mesh),
+                        material: materials.add(NormalMaterial{}),
+                        transform: Transform::from_translation(Vec3::new(cx as f32, cy as f32, cz as f32) * RES as f32 - Vec3::splat(0.5 * (CHUNK_RES * RES) as f32)),
+                        ..Default::default()
+                    });
+                }
+            }
+        }
     });
+
+
+
 }

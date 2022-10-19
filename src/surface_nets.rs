@@ -1,13 +1,15 @@
 use bevy::utils::HashMap;
 use stopwatch::Stopwatch;
 
-type SDF = dyn Fn(f32, f32, f32) -> f32;
-type GridSDF = dyn Fn(usize, usize, usize) -> f32;
+type ScalarField = dyn Fn(f32, f32, f32) -> f32;
+type DiscreteScalarField = dyn Fn(usize, usize, usize) -> f32;
+
+use super::*;
 
 // Main algorithm driver.
 pub fn surface_net(
     resolution: usize,
-    signed_distance_field: &SDF,
+    signed_distance_field: &ScalarField,
 ) -> (Vec<[f32; 3]>, Vec<[f32; 3]>, Vec<u32>) {
     let sw = Stopwatch::start_new();
 
@@ -16,7 +18,7 @@ pub fn surface_net(
         .map(|(x, y, z)| signed_distance_field(x as f32, y as f32, z as f32))
         .collect::<Vec<_>>();
     let discrete_scalar_field = &move |x, y, z| {
-        unsafe { *grid.get_unchecked(x + y * axis_length + z * axis_length * axis_length) }
+        grid[x + y * axis_length + z * axis_length * axis_length]
     };
 
     let mut positions = Vec::new();
@@ -45,12 +47,6 @@ pub fn surface_net(
     (positions, normals, indices)
 }
 
-fn coords(resolution: usize) -> impl Iterator<Item = (usize, usize, usize)> {
-    (0..resolution)
-        .flat_map(move |x| (0..resolution).map(move |y| (x, y)))
-        .flat_map(move |(x, y)| (0..resolution).map(move |z| (x, y, z)))
-}
-
 const OFFSETS: [(usize, usize); 12] = [
     (0b000, 0b001),
     (0b000, 0b010),
@@ -67,7 +63,7 @@ const OFFSETS: [(usize, usize); 12] = [
 ];
 
 fn find_center(
-    discrete_scalar_field: &GridSDF,
+    discrete_scalar_field: &DiscreteScalarField,
     coord: (usize, usize, usize),
 ) -> Option<([f32; 3], [f32; 3])> {
     let mut values = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
@@ -135,7 +131,7 @@ fn find_edge(offset1: usize, offset2: usize, value1: f32, value2: f32) -> Option
 // There's some hellish off-by-one conditions and whatnot that make this code
 // really gross.
 fn make_all_triangles(
-    discrete_scalar_field: &GridSDF,
+    discrete_scalar_field: &DiscreteScalarField,
     resolution: usize,
     grid_to_index: &HashMap<(usize, usize, usize), usize>,
     positions: &[[f32; 3]],
@@ -186,7 +182,7 @@ fn make_all_triangles(
 }
 
 fn make_triangle(
-    discrete_scalar_field: &GridSDF,
+    discrete_scalar_field: &DiscreteScalarField,
     grid_to_index: &HashMap<(usize, usize, usize), usize>,
     positions: &[[f32; 3]],
     indices: &mut Vec<u32>,
@@ -282,7 +278,7 @@ enum FaceResult {
 
 // Determine if the sign of the SDF flips between coord and (coord+offset)
 fn is_face(
-    discrete_scalar_field: &GridSDF,
+    discrete_scalar_field: &DiscreteScalarField,
     coord: (usize, usize, usize),
     offset: (usize, usize, usize),
 ) -> FaceResult {

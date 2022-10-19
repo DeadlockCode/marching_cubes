@@ -15,7 +15,7 @@ pub fn marching_cubes(
     let sw = Stopwatch::start_new();
 
     let axis_length = resolution + 1;
-    let grid = coords(resolution + 1)
+    let grid = coords(axis_length)
         .map(|(x, y, z)| scalar_field(x as f32, y as f32, z as f32))
         .collect::<Vec<_>>();
     let discrete_scalar_field = &move |x, y, z| {
@@ -41,7 +41,7 @@ pub fn marching_cubes(
         }
     }
 
-    let normals = calculate_gradient_normals(&positions, scalar_field);
+    let normals = calculate_smooth_normals(&positions, &indices);
 
     println!("Marching cubes took: {}ms", sw.elapsed_ms());
 
@@ -213,13 +213,45 @@ fn get_triangulation(
     
     march_tables::TRIANGULATIONS[triangulation_index]
 }
+fn calculate_smooth_normals(
+    positions: &Vec<[f32; 3]>,
+    indices: &Vec<u32>,
+) -> Vec<[f32; 3]> {
+    let mut normals = vec![[0.0; 3]; positions.len()];
+
+    for idx in 0..indices.len()/3 {
+        let i1 = indices[idx * 3 + 0] as usize;
+        let i2 = indices[idx * 3 + 1] as usize;
+        let i3 = indices[idx * 3 + 2] as usize;
+
+        let p1: Vec3 = positions[i1].into();
+        let p2: Vec3 = positions[i2].into();
+        let p3: Vec3 = positions[i3].into();
+
+        let n = (p2 - p1).cross(p3 - p1);
+
+        let n1: Vec3 = normals[i1].into();
+        let n2: Vec3 = normals[i2].into();
+        let n3: Vec3 = normals[i3].into();
+
+        normals[i1] = (n1 + n).into();
+        normals[i2] = (n2 + n).into();
+        normals[i3] = (n3 + n).into();
+    }
+
+    for idx in 0..normals.len() {
+        normals[idx] = Into::<Vec3>::into(normals[idx]).normalize().into();
+    }
+
+    normals
+}
 
 fn gradient(x: f32, y: f32, z: f32, scalar_field: &dyn Fn(f32, f32, f32) -> f32) -> [f32; 3] {
-    let val_o = scalar_field(x, y, z);
-    let val_x = scalar_field(x + 0.001, y, z);
-    let val_y = scalar_field(x, y + 0.001, z);
-    let val_z = scalar_field(x, y, z + 0.001);
-    return [val_x - val_o, val_y - val_o, val_z - val_o]
+    let e = 1.0;
+    let val_x = scalar_field(x - e, y, z) - scalar_field(x + e, y, z);
+    let val_y = scalar_field(x, y - e, z) - scalar_field(x, y + e, z);
+    let val_z = scalar_field(x, y, z - e) - scalar_field(x, y, z + e);
+    return [val_x, val_y, val_z]
 }
 
 fn calculate_gradient_normals(

@@ -2,6 +2,8 @@ use bevy::prelude::*;
 
 use crate::marching_cubes::march_tables;
 
+#[derive(Component)]
+pub struct LookAtCamera;
 pub enum TimeStage {
     ShowGridPoints,
     SkimGridPoints,
@@ -71,4 +73,16 @@ pub fn spawn_boundary_cube(
         }),
         ..Default::default()
     }).insert(Name::new("Bounary"));
+}
+
+
+
+pub fn look_at_camera_system(
+    mut transforms: Query<&mut Transform, (With<LookAtCamera>, Without<Camera3d>)>,
+    cameras: Query<&Transform, (With<Camera3d>, Without<LookAtCamera>)>,
+) {
+    let camera = cameras.single();
+    for mut transform in transforms.iter_mut() {
+        transform.look_at(camera.translation, Vec3::Y);
+    }
 }
