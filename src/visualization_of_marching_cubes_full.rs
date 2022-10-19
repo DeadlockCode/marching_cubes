@@ -85,7 +85,8 @@ pub fn start() {
 
         .add_startup_system(spawn_point_light)
 
-        .add_startup_system(spawn_cube)
+        .add_startup_system(spawn_boundary_cube)
+        .add_startup_system(spawn_mesh_cube)
 
         .add_startup_system(spawn_grid_points)
         .add_system(grid_point_system)
@@ -104,7 +105,7 @@ pub fn start() {
         .run();
 }
 
-fn spawn_cube(
+fn spawn_mesh_cube(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -118,29 +119,20 @@ fn spawn_cube(
 
         let (x0, y0, z0) = march_tables::POINTS[point_index.0];
         let (x1, y1, z1) = march_tables::POINTS[point_index.1];
-        positions[edge_index * 2 + 0] = [x0 as f32 - 0.5, y0 as f32 - 0.5, z0 as f32 - 0.5];
-        positions[edge_index * 2 + 1] = [x1 as f32 - 0.5, y1 as f32 - 0.5, z1 as f32 - 0.5];
+        positions[edge_index * 2 + 0] = [x0 as f32, y0 as f32, z0 as f32];
+        positions[edge_index * 2 + 1] = [x1 as f32, y1 as f32, z1 as f32];
     }
 
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
 
-    let shared_mesh = meshes.add(mesh);
-    let shared_material = materials.add(StandardMaterial {
+    commands.spawn_bundle(PbrBundle {
+        mesh: meshes.add(mesh),
+        material: materials.add(StandardMaterial {
             base_color: Color::DARK_GRAY,
             unlit: true,
             ..Default::default()
-        });
-
-    commands.spawn_bundle(PbrBundle {
-        mesh: shared_mesh.clone(),
-        material: shared_material.clone(),
-        ..Default::default()
-    }).insert(Name::new("Bounary"));
-
-    commands.spawn_bundle(PbrBundle {
-        mesh: shared_mesh.clone(),
-        material: shared_material.clone(),
+        }),
         transform: Transform::from_scale(Vec3::splat(1.0 / RES as f32)),
         visibility: Visibility {
             is_visible: false,
@@ -220,8 +212,8 @@ fn isolevel_system(
     mut isosurfaces: Query<&mut Isosurface>,
     time: Res<Time>,
 ) {
-    let t0 = TIMINGS.get_time_in_stage(TimeStage::SkimGridPoints, time.seconds_since_startup() as f32);
-    let t1 = TIMINGS.get_time_in_stage(TimeStage::InterpolateMesh, time.seconds_since_startup() as f32);
+    let t0 = TIMINGS.get_time_in_stage(TimeStage::SkimGridPoints as usize, time.seconds_since_startup() as f32);
+    let t1 = TIMINGS.get_time_in_stage(TimeStage::InterpolateMesh as usize, time.seconds_since_startup() as f32);
 
     let mut isosurface = isosurfaces.single_mut();
 
@@ -239,7 +231,7 @@ fn grid_point_system(
     time: Res<Time>,
 ) {
     let isosurface = isosurfaces.single();
-    let t = TIMINGS.get_time_in_stage(TimeStage::ShowGridPoints, time.seconds_since_startup() as f32);
+    let t = TIMINGS.get_time_in_stage(TimeStage::ShowGridPoints as usize, time.seconds_since_startup() as f32);
 
     for (mut visibility, grid_point) in grid_points.iter_mut() {
         let value = SCALAR_FIELD(grid_point.x as f32, grid_point.y as f32, grid_point.z as f32) / isosurface.max_value;
@@ -314,8 +306,8 @@ fn grid_mesh_system(
     mut mesh_highlight: Query<(&mut Transform, &mut Visibility), With<Highlight>>,
     time: Res<Time>,
 ) {
-    let t0 = TIMINGS.get_time_in_stage(TimeStage::ShowGridMeshes, time.seconds_since_startup() as f32);
-    let t1 = TIMINGS.get_time_in_stage(TimeStage::InterpolateMesh, time.seconds_since_startup() as f32);
+    let t0 = TIMINGS.get_time_in_stage(TimeStage::ShowGridMeshes as usize, time.seconds_since_startup() as f32);
+    let t1 = TIMINGS.get_time_in_stage(TimeStage::InterpolateMesh as usize, time.seconds_since_startup() as f32);
 
     let (mut highlight_transform, mut highlight_visibility) = mesh_highlight.single_mut();
 
@@ -329,7 +321,7 @@ fn grid_mesh_system(
             && t1 == 0.0;
 
         if current == grid_mesh.x + grid_mesh.y * RES + grid_mesh.z * RES * RES + 1 {
-            highlight_transform.translation = Vec3::new(grid_mesh.x as f32, grid_mesh.y as f32, grid_mesh.z as f32) / RES as f32 - Vec3::splat(0.5) + Vec3::splat(0.5) / RES as f32;
+            highlight_transform.translation = Vec3::new(grid_mesh.x as f32, grid_mesh.y as f32, grid_mesh.z as f32) / RES as f32 - Vec3::splat(0.5);
             highlight_visibility.is_visible = true;
         }
         else if t0 == 1.0 {
@@ -369,8 +361,8 @@ fn interpolate_mesh_system(
     time: Res<Time>,
     mut mesh_holders: Query<(&mut Visibility, &Handle<Mesh>), With<MeshHolder>>
 ) {
-    let t0 = TIMINGS.get_time_in_stage(TimeStage::InterpolateMesh, time.seconds_since_startup() as f32);
-    let t1 = TIMINGS.get_time_in_stage(TimeStage::NormalizeMesh, time.seconds_since_startup() as f32);
+    let t0 = TIMINGS.get_time_in_stage(TimeStage::InterpolateMesh as usize, time.seconds_since_startup() as f32);
+    let t1 = TIMINGS.get_time_in_stage(TimeStage::NormalizeMesh as usize, time.seconds_since_startup() as f32);
 
     let (positions, normals) = 
         marching_cubes::marching_cubes_interpolation(

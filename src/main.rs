@@ -9,6 +9,7 @@ pub mod visualization_helper;
 use std::f32::consts::PI;
 
 pub use bevy::prelude::*;
+use bevy::render::camera::Projection;
 
 pub const WIDTH: f32 = 1280.0;
 pub const HEIGHT: f32 = 720.0;
@@ -63,13 +64,14 @@ fn camera_system (
 
     let t = time.seconds_since_startup() as f32 * 2.0 * PI / 60.0;
 
-    camera.translation = Vec3::new(t.cos(), 0.5, t.sin()) * 2.0;
+    camera.translation = Vec3::new(t.cos(), 0.5, t.sin()) * 2.2;
     camera.look_at(Vec3::new(0.0, -0.1, 0.0), Vec3::Y)
 }
 
 fn spawn_camera(mut commands: Commands) {
     commands.spawn_bundle(Camera3dBundle {
         transform: Transform::from_xyz(0.0, 0.0, 0.0),
+        projection: Projection::Perspective(PerspectiveProjection { fov: 0.65, ..Default::default() }),
         ..Default::default()
     })
     .insert(Name::new("Camera"));
