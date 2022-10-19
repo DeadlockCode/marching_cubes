@@ -5,6 +5,8 @@ pub mod visualization_of_marching_cubes_full;
 pub mod visualization_of_marching_cubes_zoom;
 pub mod circle_fan;
 pub mod visualization_helper;
+pub mod normal_material;
+pub mod cube_sphere;
 
 use std::f32::consts::PI;
 
@@ -14,7 +16,7 @@ use bevy::render::camera::Projection;
 pub const WIDTH: f32 = 1280.0;
 pub const HEIGHT: f32 = 720.0;
 
-const APP: u32 = 1;
+const APP: u32 = 0;
 
 fn main() {
     match APP {
@@ -78,7 +80,9 @@ fn spawn_camera(mut commands: Commands) {
 }
 
 fn coords(size: usize) -> impl Iterator<Item = (usize, usize, usize)> {
-    (0..size)
-        .flat_map(move |x| (0..size).map(move |y| (x, y)))
-        .flat_map(move |(x, y)| (0..size).map(move |z| (x, y, z)))
+    (0..size).flat_map(move |z| {
+        (0..size).map(move |y| (y, z))
+    }).flat_map(move |(y, z)| {
+        (0..size).map(move |x| (x, y, z))
+    })
 }

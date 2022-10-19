@@ -41,20 +41,18 @@ struct Highlight;
 #[derive(Component)]
 struct MeshHolder;
 
-#[derive(Component)]
-struct LookAtCamera;
+fn shape(i: f32, j: f32, k: f32) -> f32 {
+    let scale = (128.0/17.0) / RES as f32;
 
-fn scalar_field(i: f32, j: f32, k: f32) -> f32 {
-    let mul = (128.0/17.0) / RES as f32;
-
-    let (x, y, z) = (i * mul - 4.0, j * mul - 4.0, k * mul - 4.0);
+    let (x, y, z) = (i * scale - 4.0, j * scale - 4.0, k * scale - 4.0);
 
     (x-2.0)*(x-2.0)*(x+2.0)*(x+2.0) + (y-2.0)*(y-2.0)*(y+2.0)*(y+2.0) + (z-2.0)*(z-2.0)*(z+2.0)*(z+2.0) + 3.0*(x*x*y*y+x*x*z*z+y*y*z*z) + 6.0*x*y*z - 10.0*(x*x+y*y+z*z) + 22.0
 }
-fn sphere(i: f32, j: f32, k: f32) -> f32 {
-    let mul = 1.0 / RES as f32;
 
-    let (x, y, z) = (i * mul - 0.5, j * mul - 0.5, k * mul - 0.5);
+fn sphere(i: f32, j: f32, k: f32) -> f32 {
+    let scale = 1.0 / RES as f32;
+
+    let (x, y, z) = (i * scale - 0.5, j * scale - 0.5, k * scale - 0.5);
 
     x*x + y*y + z*z - 0.2
 }
@@ -172,7 +170,7 @@ fn spawn_grid_points(
             val
         })
         .collect::<Vec<_>>();
-    let discrete_scalar_field = &move |x, y, z| {
+    let discrete_scalar_field = &move |x, y, z| -> f32 {
         points[x + y * (RES + 1) + z * (RES + 1) * (RES + 1)] / largest
     };
 
@@ -239,16 +237,6 @@ fn grid_point_system(
         visibility.is_visible = 
             value.abs().sqrt() * value.signum() <= isosurface.isolevel
             && (smoothstep(t) * ((RES + 1) * (RES + 1) * (RES + 1)) as f32) as usize > grid_point.x + grid_point.y * (RES + 1) + grid_point.z * (RES + 1) * (RES + 1);
-    }
-}
-
-fn look_at_camera_system(
-    mut transforms: Query<&mut Transform, (With<LookAtCamera>, Without<Camera3d>)>,
-    cameras: Query<&Transform, (With<Camera3d>, Without<LookAtCamera>)>,
-) {
-    let camera = cameras.single();
-    for mut transform in transforms.iter_mut() {
-        transform.look_at(camera.translation, Vec3::Y);
     }
 }
 
