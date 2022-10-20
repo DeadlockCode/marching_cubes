@@ -79,6 +79,7 @@ fn spawn_corner_numbers(
             for y in 0..2usize {
                 for x in 0..2usize {
                     let num = ('0' as u8 + (x + y * 2 + z * 4) as u8) as char;
+                    println!("{}", num);
                     let glyph: MeshText = generator.generate_glyph(num, true, None).unwrap(); // error -------------------------------------
                 
                     let mut positions = Vec::<[f32; 3]>::new();
