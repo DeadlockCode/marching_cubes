@@ -5,7 +5,7 @@ use crate::visualization_helper::*;
 use bevy::{render::mesh::Indices, log::LogSettings};
 use bevy_inspector_egui::{WorldInspectorPlugin, RegisterInspectable};
 
-use meshtext;
+use meshtext::{self, Glyph, MeshText};
 
 
 fn scalar_field(i: f32, j: f32, k: f32) -> f32 {
@@ -49,7 +49,7 @@ pub fn start() {
 
         .add_startup_system(spawn_boundary_cube)
 
-        .add_startup_system(spawn_grid_points)
+        .add_startup_system(spawn_corner_numbers)
         //.add_system(grid_point_system)
 
         //.add_startup_system(spawn_grid_mesh)
@@ -58,61 +58,43 @@ pub fn start() {
         //.add_startup_system(spawn_mesh_holder)
         //.add_system(interpolate_mesh_system)
 
-        //.add_system(look_at_camera_system)
+        .add_system(look_at_camera_system)
 
         //.register_inspectable::<Isosurface>()
         .run();
 }
 
 
-fn spawn_grid_points(
+fn spawn_corner_numbers(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    let (positions, normals, indices) = circle_fan::circle_fan(8);
+    let font_data = include_bytes!("../assets/SourceCodePro-Bold.ttf");
+    let mut generator = meshtext::MeshGenerator::new(font_data);
 
-    let mut mesh = Mesh::new(bevy::render::render_resource::PrimitiveTopology::TriangleList);
-    mesh.set_indices(Some(Indices::U32(indices)));
-    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
-    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
-
-    let shared_mesh = meshes.add(mesh);
-
-    let mut binding = commands.spawn_bundle(SpatialBundle::default());
-    let grid = binding.insert(Name::new("Grid"));
-
-    let mut largest = f32::MIN;
-
-    let points = coords(2)
-        .map(|(x, y, z)| {
-            let val = SCALAR_FIELD(x as f32, y as f32, z as f32);
-
-            largest = largest.max(val);
-
-            val
-        })
-        .collect::<Vec<_>>();
-    let discrete_scalar_field = &move |x, y, z| -> f32 {
-        points[x + y * 2 + z * 4] / largest
-    };
-
-    //let mesh = meshtext::MeshGenerator::new(font)
-
-    grid.add_children(|parent| {
+    commands.spawn_bundle(SpatialBundle::default()).insert(Name::new("Cormers"))
+    .with_children(|builder| {
         for z in 0..2usize {
             for y in 0..2usize {
                 for x in 0..2usize {
-                    let col = (discrete_scalar_field(x, y, z)).max(0.0).sqrt();
-    
-                    parent.spawn_bundle(MaterialMeshBundle {
-                        mesh: shared_mesh.clone(),
-                        material: materials.add(StandardMaterial {
-                            base_color: Color::rgb(col, col, col), 
-                            unlit: true,
-                            ..Default::default()
-                        }),
-                        transform: Transform::from_translation(Vec3::new(x as f32, y as f32, z as f32) - Vec3::splat(0.5)).with_scale(Vec3::splat(0.01)),
+                    let num = ('0' as u8 + (x + y * 2 + z * 4) as u8) as char;
+                    let glyph: MeshText = generator.generate_glyph(num, true, None).unwrap(); // error -------------------------------------
+                
+                    let mut positions = Vec::<[f32; 3]>::new();
+                    let mut normals = Vec::<[f32; 3]>::new();
+                    for i in 0..glyph.vertices.len()/3 {
+                        positions.push([-glyph.vertices[i * 3 + 0], glyph.vertices[i * 3 + 1], glyph.vertices[i * 3 + 2]]);
+                        normals.push(Vec3::Z.into());
+                    }
+                
+                    let mut mesh = Mesh::new(bevy::render::render_resource::PrimitiveTopology::TriangleList);
+                    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+                    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+
+                    builder.spawn_bundle(PbrBundle {
+                        mesh: meshes.add(mesh),
+                        transform: Transform::from_translation(Vec3::new(x as f32, y as f32, z as f32) - Vec3::splat(0.5)).with_scale(Vec3::splat(0.1)),
                         ..Default::default()
                     })
                     .insert(LookAtCamera)
