@@ -1,11 +1,11 @@
 use super::*;
 
-use crate::visualization_helper::*;
+use crate::{visualization_helper::*, marching_cubes::march_tables};
 
-use bevy::{render::mesh::Indices, log::LogSettings};
+use bevy::{render::{mesh::Indices, render_resource::Face}, log::LogSettings};
 use bevy_inspector_egui::{WorldInspectorPlugin, RegisterInspectable};
 
-use meshtext::{self, Glyph, MeshText};
+use ttf2mesh::Value;
 
 
 fn scalar_field(i: f32, j: f32, k: f32) -> f32 {
@@ -70,32 +70,66 @@ fn spawn_corner_numbers(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    let font_data = include_bytes!("../assets/SourceCodePro-Bold.ttf");
-    let mut generator = meshtext::MeshGenerator::new(font_data);
+    let mut font = ttf2mesh::TTFFile::from_file("C:\\Projects\\marching_cubes\\assets\\RobotoMono-Regular.ttf").unwrap();
 
-    commands.spawn_bundle(SpatialBundle::default()).insert(Name::new("Cormers"))
+    let shared_material = materials.add(StandardMaterial {
+        base_color: Color::WHITE,
+        unlit: true,
+        ..Default::default()
+    });
+
+    commands.spawn_bundle(SpatialBundle::default())
+    .insert(Name::new("Cormers"))
     .with_children(|builder| {
         for z in 0..2usize {
             for y in 0..2usize {
                 for x in 0..2usize {
-                    let num = ('0' as u8 + (x + y * 2 + z * 4) as u8) as char;
+                    const INDEX: [usize; 8] = [
+                        1,
+                        2,
+                        5,
+                        6,
+                        0,
+                        3,
+                        4,
+                        7,
+                    ];
+
+                    let num = ('0' as u8 + (INDEX[x + y * 2 + z * 4]) as u8) as char;
                     println!("{}", num);
-                    let glyph: MeshText = generator.generate_glyph(num, true, None).unwrap(); // error -------------------------------------
-                
-                    let mut positions = Vec::<[f32; 3]>::new();
-                    let mut normals = Vec::<[f32; 3]>::new();
-                    for i in 0..glyph.vertices.len()/3 {
-                        positions.push([-glyph.vertices[i * 3 + 0], glyph.vertices[i * 3 + 1], glyph.vertices[i * 3 + 2]]);
-                        normals.push(Vec3::Z.into());
-                    }
+
+                    let mut glyph = font.glyph_from_char(num).unwrap();
+
+                    let bad_mesh = glyph.to_2d_mesh(ttf2mesh::Quality::High).unwrap();
+
+                    let positions = bad_mesh.iter_vertices()
+                        .map(|v| {
+                            let v = v.val();
+                            [-v.0 + 0.3, v.1 - 0.3, 0.0]
+                        })
+                        .collect::<Vec<_>>();
+
+                    let mut indices = Vec::<u32>::new();
+
+                    bad_mesh.iter_faces()
+                        .for_each(|f| {
+                            let f = f.val();
+                            indices.push(f.0 as u32);
+                            indices.push(f.1 as u32);
+                            indices.push(f.2 as u32);
+                        });
+
+                    let normals = vec![[0.0, 0.0, -1.0]; positions.len()];
                 
                     let mut mesh = Mesh::new(bevy::render::render_resource::PrimitiveTopology::TriangleList);
+                    mesh.set_indices(Some(Indices::U32(indices)));
                     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
                     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
 
                     builder.spawn_bundle(PbrBundle {
                         mesh: meshes.add(mesh),
                         transform: Transform::from_translation(Vec3::new(x as f32, y as f32, z as f32) - Vec3::splat(0.5)).with_scale(Vec3::splat(0.1)),
+                        material: shared_material.clone(),
                         ..Default::default()
                     })
                     .insert(LookAtCamera)
