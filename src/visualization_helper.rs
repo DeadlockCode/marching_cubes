@@ -1,3 +1,5 @@
+use std::f32::consts::PI;
+
 use bevy::prelude::*;
 
 use crate::marching_cubes::march_tables;
@@ -83,6 +85,8 @@ pub fn look_at_camera_system(
 ) {
     let camera = cameras.single();
     for mut transform in transforms.iter_mut() {
-        transform.look_at(camera.translation, Vec3::Y);
+        let rotation = camera.rotation;
+        transform.rotation = rotation;
+        transform.rotate_local_y(PI);
     }
 }
