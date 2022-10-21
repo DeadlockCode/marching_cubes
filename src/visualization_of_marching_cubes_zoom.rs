@@ -5,7 +5,7 @@ use crate::{visualization_helper::*, marching_cubes::march_tables};
 use bevy::{render::{mesh::Indices, render_resource::Face}, log::LogSettings};
 use bevy_inspector_egui::{WorldInspectorPlugin, RegisterInspectable};
 
-use ttf2mesh::Value;
+use ttf2mesh::{Value, TTFFile};
 
 
 fn scalar_field(i: f32, j: f32, k: f32) -> f32 {
@@ -73,44 +73,21 @@ fn spawn_corner_numbers(
     let mut font = ttf2mesh::TTFFile::from_file("C:\\Projects\\marching_cubes\\assets\\RobotoMono-Regular.ttf").unwrap();
 
     let shared_material = materials.add(StandardMaterial {
-        base_color: Color::WHITE,
+        base_color: Color::DARK_GRAY,
         unlit: true,
         ..Default::default()
     });
 
     commands.spawn_bundle(SpatialBundle::default())
-    .insert(Name::new("Cormers"))
+    .insert(Name::new("Corners"))
     .with_children(|builder| {
         for i in 0..8usize {
 
             let num = ('0' as u8 + i as u8) as char;
             println!("{}", num);
 
-            let mut glyph = font.glyph_from_char(num).unwrap();
-
-            let bad_mesh = glyph.to_2d_mesh(ttf2mesh::Quality::High).unwrap();
-
-            let positions = bad_mesh.iter_vertices()
-                .map(|v| {
-                    let v = v.val();
-                    [-v.0 + 0.3, v.1 - 0.3, 0.0]
-                })
-                .collect::<Vec<_>>();
-
-            let mut indices = Vec::<u32>::new();
-
-            bad_mesh.iter_faces()
-                .for_each(|f| {
-                    let f = f.val();
-                    indices.push(f.0 as u32);
-                    indices.push(f.1 as u32);
-                    indices.push(f.2 as u32);
-                });
-
+            let (positions, normals, indices) = mesh_from_char(&mut font, num);
             
-
-            let normals = vec![[0.0, 0.0, -1.0]; positions.len()];
-        
             let mut mesh = Mesh::new(bevy::render::render_resource::PrimitiveTopology::TriangleList);
             mesh.set_indices(Some(Indices::U32(indices)));
             mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
@@ -125,7 +102,119 @@ fn spawn_corner_numbers(
                 ..Default::default()
             })
             .insert(LookAtCamera)
-            .insert(Name::new("(".to_owned() + &p.0.to_string() + &", ".to_owned() + &p.1.to_string() + &", ".to_owned() + &p.2.to_string() + &")".to_owned()));
+            .insert(Name::new(i.to_string()));
         }
     });
+
+
+    commands.spawn_bundle(SpatialBundle::default())
+    .insert(Name::new("Edges"))
+    .with_children(|builder| {
+        for i in 0..12usize {
+            if i < 10 {
+                let num = ('0' as u8 + i as u8) as char;
+                println!("{}", num);
+    
+                let (positions, normals, indices) = mesh_from_char(&mut font, num);
+            
+                let mut mesh = Mesh::new(bevy::render::render_resource::PrimitiveTopology::TriangleList);
+                mesh.set_indices(Some(Indices::U32(indices)));
+                mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+                mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+
+                let edge = march_tables::EDGES[i];
+
+                let p1 = march_tables::POINTS[edge.0];
+                let p2 = march_tables::POINTS[edge.1];
+    
+                let p = ((p1.0 + p2.0) as f32 * 0.5, (p1.1 + p2.1) as f32 * 0.5, (p1.2 + p2.2) as f32 * 0.5);
+    
+                builder.spawn_bundle(PbrBundle {
+                    mesh: meshes.add(mesh),
+                    transform: Transform::from_translation(Vec3::new(p.0 as f32, p.1 as f32, p.2 as f32) - Vec3::splat(0.5)).with_scale(Vec3::splat(0.1)),
+                    material: shared_material.clone(),
+                    ..Default::default()
+                })
+                .insert(LookAtCamera)
+                .insert(Name::new(i.to_string()));
+            }
+            else {
+                let num = ('0' as u8 + (i % 10) as u8) as char;
+                println!("1{}", num);
+
+                let (positions0, normals0, indices0) = mesh_from_char(&mut font, '1');
+                let (positions1, normals1, indices1) = mesh_from_char(&mut font, num);
+
+                let mut mesh0 = Mesh::new(bevy::render::render_resource::PrimitiveTopology::TriangleList);
+                mesh0.set_indices(Some(Indices::U32(indices0)));
+                mesh0.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions0);
+                mesh0.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals0);
+
+                let mut mesh1 = Mesh::new(bevy::render::render_resource::PrimitiveTopology::TriangleList);
+                mesh1.set_indices(Some(Indices::U32(indices1)));
+                mesh1.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions1);
+                mesh1.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals1);
+
+                let edge = march_tables::EDGES[i];
+
+                let p1 = march_tables::POINTS[edge.0];
+                let p2 = march_tables::POINTS[edge.1];
+    
+                let p = ((p1.0 + p2.0) as f32 * 0.5, (p1.1 + p2.1) as f32 * 0.5, (p1.2 + p2.2) as f32 * 0.5);
+
+                builder.spawn_bundle(SpatialBundle {
+                    transform : Transform::from_translation(Vec3::new(p.0 as f32, p.1 as f32, p.2 as f32) - Vec3::splat(0.5)).with_scale(Vec3::splat(0.1)),
+                    ..Default::default()
+                })
+                .insert(LookAtCamera)
+                .insert(Name::new(i.to_string()))
+                .with_children(|builder| {
+
+                    builder.spawn_bundle(PbrBundle {
+                        mesh: meshes.add(mesh0),
+                        transform: Transform::from_xyz(0.25, 0.0, 0.0),
+                        material: shared_material.clone(),
+                        ..Default::default()
+                    });
+
+                    builder.spawn_bundle(PbrBundle {
+                        mesh: meshes.add(mesh1),
+                        transform: Transform::from_xyz(-0.25, 0.0, 0.0),
+                        material: shared_material.clone(),
+                        ..Default::default()
+                    });
+                });
+            }
+        }
+    });
+}
+
+fn mesh_from_char(
+    font: &mut TTFFile,
+    char: char,
+) -> (Vec<[f32; 3]>, Vec<[f32; 3]>, Vec<u32>) {
+    let mut glyph = font.glyph_from_char(char).unwrap();
+
+    let glyph_mesh = glyph.to_2d_mesh(ttf2mesh::Quality::High).unwrap();
+
+    let positions = glyph_mesh.iter_vertices()
+        .map(|v| {
+            let v = v.val();
+            [-(v.0 - 0.3), (v.1 - 0.36), 0.0]
+        })
+        .collect::<Vec<_>>();
+
+    let mut indices = Vec::<u32>::new();
+
+    glyph_mesh.iter_faces()
+        .for_each(|f| {
+            let f = f.val();
+            indices.push(f.0 as u32);
+            indices.push(f.1 as u32);
+            indices.push(f.2 as u32);
+        });
+
+    let normals = vec![[0.0, 0.0, -1.0]; positions.len()];
+
+    (positions, normals, indices)
 }

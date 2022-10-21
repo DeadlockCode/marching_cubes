@@ -44,15 +44,6 @@ pub fn start() {
         .run();
 }
 
-
-fn spawn_camera(mut commands: Commands) {
-    commands.spawn_bundle(Camera3dBundle {
-        transform: Transform::from_xyz(0.0, 0.0, 0.0),
-        ..Default::default()
-    })
-    .insert(Name::new("Camera"));
-}
-
 fn update_camera(
     keys: Res<Input<KeyCode>>,
     buttons: Res<Input<MouseButton>>,
@@ -74,7 +65,7 @@ fn update_camera(
             camera.translation += dir * delta * MOVE_SPEED;
         }
         if keys.pressed(KeyCode::A) {
-            let dir = camera.left();
+            let dir = -camera.left(); // negative because camera x scale is negative to create left-handed coordinate system
             camera.translation += dir * delta * MOVE_SPEED;
         }
         if keys.pressed(KeyCode::S) {
@@ -82,13 +73,13 @@ fn update_camera(
             camera.translation += dir * delta * MOVE_SPEED;
         }
         if keys.pressed(KeyCode::D) {
-            let dir = camera.right();
+            let dir = -camera.right(); // negative because camera x scale is negative to create left-handed coordinate system
             camera.translation += dir * delta * MOVE_SPEED;
         }
         if buttons.pressed(MouseButton::Left) {
             for ev in motion_evr.iter() {
                 camera.rotate_local_axis(Vec3::X, -ev.delta.y * delta * SENSITIVITY);
-                camera.rotate_axis(Vec3::Y, -ev.delta.x * delta * SENSITIVITY);
+                camera.rotate_axis(Vec3::Y, ev.delta.x * delta * SENSITIVITY);
             }
         }
     }

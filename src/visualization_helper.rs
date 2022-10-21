@@ -87,6 +87,6 @@ pub fn look_at_camera_system(
     for mut transform in transforms.iter_mut() {
         let rotation = camera.rotation;
         transform.rotation = rotation;
-        transform.rotate_local_y(PI);
+        //transform.rotate_local_y(PI)
     }
 }

@@ -16,7 +16,7 @@ use bevy::render::camera::Projection;
 pub const WIDTH: f32 = 1280.0;
 pub const HEIGHT: f32 = 720.0;
 
-const APP: u32 = 2;
+const APP: u32 = 0;
 
 fn main() {
     match APP {
@@ -73,7 +73,7 @@ fn camera_system (
 
 fn spawn_camera(mut commands: Commands) {
     commands.spawn_bundle(Camera3dBundle {
-        transform: Transform::from_xyz(0.0, 0.0, 0.0),
+        transform: Transform::from_xyz(0.0, 0.0, 0.0).with_scale(Vec3::new(-1.0, 1.0, 1.0)),
         projection: Projection::Perspective(PerspectiveProjection { fov: 0.65, ..Default::default() }),
         ..Default::default()
     })

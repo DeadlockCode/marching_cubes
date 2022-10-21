@@ -248,9 +248,9 @@ fn calculate_smooth_normals(
 
 fn gradient(x: f32, y: f32, z: f32, scalar_field: &dyn Fn(f32, f32, f32) -> f32) -> [f32; 3] {
     let e = 1.0;
-    let val_x = scalar_field(x - e, y, z) - scalar_field(x + e, y, z);
-    let val_y = scalar_field(x, y - e, z) - scalar_field(x, y + e, z);
-    let val_z = scalar_field(x, y, z - e) - scalar_field(x, y, z + e);
+    let val_x = scalar_field(x + e, y, z) - scalar_field(x - e, y, z);
+    let val_y = scalar_field(x, y + e, z) - scalar_field(x, y - e, z);
+    let val_z = scalar_field(x, y, z + e) - scalar_field(x, y, z - e);
     return [val_x, val_y, val_z]
 }
 
