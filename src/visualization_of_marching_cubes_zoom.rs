@@ -81,61 +81,51 @@ fn spawn_corner_numbers(
     commands.spawn_bundle(SpatialBundle::default())
     .insert(Name::new("Cormers"))
     .with_children(|builder| {
-        for z in 0..2usize {
-            for y in 0..2usize {
-                for x in 0..2usize {
-                    const INDEX: [usize; 8] = [
-                        1,
-                        2,
-                        5,
-                        6,
-                        0,
-                        3,
-                        4,
-                        7,
-                    ];
+        for i in 0..8usize {
 
-                    let num = ('0' as u8 + (INDEX[x + y * 2 + z * 4]) as u8) as char;
-                    println!("{}", num);
+            let num = ('0' as u8 + i as u8) as char;
+            println!("{}", num);
 
-                    let mut glyph = font.glyph_from_char(num).unwrap();
+            let mut glyph = font.glyph_from_char(num).unwrap();
 
-                    let bad_mesh = glyph.to_2d_mesh(ttf2mesh::Quality::High).unwrap();
+            let bad_mesh = glyph.to_2d_mesh(ttf2mesh::Quality::High).unwrap();
 
-                    let positions = bad_mesh.iter_vertices()
-                        .map(|v| {
-                            let v = v.val();
-                            [-v.0 + 0.3, v.1 - 0.3, 0.0]
-                        })
-                        .collect::<Vec<_>>();
+            let positions = bad_mesh.iter_vertices()
+                .map(|v| {
+                    let v = v.val();
+                    [-v.0 + 0.3, v.1 - 0.3, 0.0]
+                })
+                .collect::<Vec<_>>();
 
-                    let mut indices = Vec::<u32>::new();
+            let mut indices = Vec::<u32>::new();
 
-                    bad_mesh.iter_faces()
-                        .for_each(|f| {
-                            let f = f.val();
-                            indices.push(f.0 as u32);
-                            indices.push(f.1 as u32);
-                            indices.push(f.2 as u32);
-                        });
+            bad_mesh.iter_faces()
+                .for_each(|f| {
+                    let f = f.val();
+                    indices.push(f.0 as u32);
+                    indices.push(f.1 as u32);
+                    indices.push(f.2 as u32);
+                });
 
-                    let normals = vec![[0.0, 0.0, -1.0]; positions.len()];
-                
-                    let mut mesh = Mesh::new(bevy::render::render_resource::PrimitiveTopology::TriangleList);
-                    mesh.set_indices(Some(Indices::U32(indices)));
-                    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
-                    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+            
 
-                    builder.spawn_bundle(PbrBundle {
-                        mesh: meshes.add(mesh),
-                        transform: Transform::from_translation(Vec3::new(x as f32, y as f32, z as f32) - Vec3::splat(0.5)).with_scale(Vec3::splat(0.1)),
-                        material: shared_material.clone(),
-                        ..Default::default()
-                    })
-                    .insert(LookAtCamera)
-                    .insert(Name::new("(".to_owned() + &x.to_string() + &", ".to_owned() + &y.to_string() + &", ".to_owned() + &z.to_string() + &")".to_owned()));
-                }
-            }
+            let normals = vec![[0.0, 0.0, -1.0]; positions.len()];
+        
+            let mut mesh = Mesh::new(bevy::render::render_resource::PrimitiveTopology::TriangleList);
+            mesh.set_indices(Some(Indices::U32(indices)));
+            mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+            mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+
+            let p = march_tables::POINTS[i];
+
+            builder.spawn_bundle(PbrBundle {
+                mesh: meshes.add(mesh),
+                transform: Transform::from_translation(Vec3::new(p.0 as f32, p.1 as f32, p.2 as f32) - Vec3::splat(0.5)).with_scale(Vec3::splat(0.1)),
+                material: shared_material.clone(),
+                ..Default::default()
+            })
+            .insert(LookAtCamera)
+            .insert(Name::new("(".to_owned() + &p.0.to_string() + &", ".to_owned() + &p.1.to_string() + &", ".to_owned() + &p.2.to_string() + &")".to_owned()));
         }
     });
 }

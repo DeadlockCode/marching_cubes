@@ -60,14 +60,14 @@ fn spawn_directional_light(
 }
 
 fn camera_system (
-    mut cameras: Query<(&mut Transform, With<Camera3d>)>,
+    mut cameras: Query<&mut Transform, With<Camera3d>>,
     time: Res<Time>,
 ) {
-    let mut camera = cameras.single_mut().0;
+    let mut camera = cameras.single_mut();
 
     let t = time.seconds_since_startup() as f32 * 2.0 * PI / 60.0;
 
-    camera.translation = Vec3::new(t.cos(), 0.5, t.sin()) * 2.2;
+    camera.translation = Vec3::new(-t.sin(), 0.5, t.cos()) * 2.2;
     camera.look_at(Vec3::new(0.0, -0.1, 0.0), Vec3::Y)
 }
 
