@@ -1,23 +1,16 @@
-use std::f32::consts::PI;
-
 use bevy::prelude::*;
 
 use crate::marching_cubes::march_tables;
 
 #[derive(Component)]
 pub struct LookAtCamera;
-pub enum TimeStage {
-    ShowGridPoints,
-    SkimGridPoints,
-    ShowGridMeshes,
-    InterpolateMesh,
-    NormalizeMesh,
-}
-
 pub struct Timings {
     pub timings: [f32; 5],
     pub delays: [f32; 5],
 }
+
+#[derive(Component)]
+pub struct MeshHolder;
 
 impl Timings {
     pub fn get_time_in_stage(&self, stage: usize, time: f32) -> f32 {
@@ -45,6 +38,9 @@ pub fn smoothstep(t: f32) -> f32 {
     return t * t * (3.0 - 2.0 * t);
 }
 
+#[derive(Component)]
+pub struct Boundary;
+
 pub fn spawn_boundary_cube(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -59,6 +55,7 @@ pub fn spawn_boundary_cube(
 
         let (x0, y0, z0) = march_tables::POINTS[point_index.0];
         let (x1, y1, z1) = march_tables::POINTS[point_index.1];
+
         positions[edge_index * 2 + 0] = [x0 as f32 - 0.5, y0 as f32 - 0.5, z0 as f32 - 0.5];
         positions[edge_index * 2 + 1] = [x1 as f32 - 0.5, y1 as f32 - 0.5, z1 as f32 - 0.5];
     }
@@ -74,7 +71,9 @@ pub fn spawn_boundary_cube(
             ..Default::default()
         }),
         ..Default::default()
-    }).insert(Name::new("Bounary"));
+    })
+    .insert(Boundary {})
+    .insert(Name::new("Bounary"));
 }
 
 
