@@ -16,7 +16,7 @@ use bevy::render::camera::Projection;
 pub const WIDTH: f32 = 1280.0;
 pub const HEIGHT: f32 = 720.0;
 
-const APP: u32 = 0;
+const APP: u32 = 2;
 
 fn main() {
     match APP {
@@ -67,8 +67,8 @@ fn camera_system (
 
     let t = time.seconds_since_startup() as f32 * 2.0 * PI / 60.0;
 
-    camera.translation = Vec3::new(-t.sin(), 0.5, t.cos()) * 2.2;
-    camera.look_at(Vec3::new(0.0, -0.1, 0.0), Vec3::Y)
+    camera.translation = Vec3::new(-t.sin() * 2.2, 1.0, -t.cos() * 2.2);
+    camera.look_at(Vec3::new(0.0, -0.15, 0.0), Vec3::Y)
 }
 
 fn spawn_camera(mut commands: Commands) {

@@ -4,9 +4,7 @@ use super::*;
 
 #[derive(AsBindGroup, TypeUuid, Clone)]
 #[uuid = "f690fdae-d598-45ab-8225-97e2a3f056e0"]
-pub struct NormalMaterial {
-
-}
+pub struct NormalMaterial {}
 
 impl Material for NormalMaterial {
     fn fragment_shader() -> ShaderRef {

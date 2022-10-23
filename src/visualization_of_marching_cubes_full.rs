@@ -9,6 +9,14 @@ use crate::visualization_helper::*;
 
 const RES: usize = 16;
 
+enum TimeStage {
+    ShowGridPoints,
+    SkimGridPoints,
+    ShowGridMeshes,
+    InterpolateMesh,
+    NormalizeMesh,
+}
+
 const TIMINGS: Timings = Timings {
     timings:  [10.0, 2.0, 30.0, 2.0, 0.5],
     delays: [2.5, 5.0, 2.0, 2.0, 5.0],
@@ -37,9 +45,6 @@ struct Isosurface {
 
 #[derive(Inspectable, Component)]
 struct Highlight;
-
-#[derive(Component)]
-struct MeshHolder;
 
 fn shape(i: f32, j: f32, k: f32) -> f32 {
     let scale = (128.0/17.0) / RES as f32;
@@ -157,9 +162,6 @@ fn spawn_grid_points(
     let mut largest = f32::MIN;
     let mut smallest = f32::MAX;
 
-    let mut binding = commands.spawn_bundle(SpatialBundle::default());
-    let grid = binding.insert(Name::new("Grid"));
-
     let points = coords(RES + 1)
         .map(|(x, y, z)| {
             let val = SCALAR_FIELD(x as f32, y as f32, z as f32);
@@ -174,7 +176,10 @@ fn spawn_grid_points(
         points[x + y * (RES + 1) + z * (RES + 1) * (RES + 1)] / largest
     };
 
-    grid.add_children(|parent| {
+    commands.spawn_bundle(
+        SpatialBundle::default()
+    ).insert(Name::new("Points"))
+    .with_children(|parent| {
         for z in 0..(RES + 1) {
             for y in 0..(RES + 1) {
                 for x in 0..(RES + 1) {

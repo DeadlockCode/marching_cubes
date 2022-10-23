@@ -33,7 +33,7 @@ pub fn marching_cubes(
                 let triangulation = get_triangulation(discrete_scalar_field, (x, y, z));
 
                 for edge_index in triangulation {
-                    if edge_index == march_tables::INV { break; }
+                    if edge_index == -1 { break; }
 
                     make_vertex(discrete_scalar_field, &mut positions, &mut edge_to_index, &mut indices, (x, y, z), edge_index as usize);
                 }
@@ -71,7 +71,7 @@ pub fn marching_cubes_interpolation(
                 let triangulation = get_triangulation(discrete_scalar_field, (x, y, z));
 
                 for edge_index in triangulation {
-                    if edge_index == march_tables::INV { break; }
+                    if edge_index == -1 { break; }
 
                     make_vertex_interpolation(discrete_scalar_field, &mut positions, (x, y, z), edge_index as usize, interpolate);
                 }
@@ -119,7 +119,7 @@ pub fn marching_cubes_disjointed(
                 let triangulation = get_triangulation(discrete_scalar_field, (x, y, z));
 
                 for edge_index in triangulation {
-                    if edge_index == march_tables::INV { break; }
+                    if edge_index == -1 { break; }
 
                     make_vertex_interpolation(discrete_scalar_field, &mut positions, (x, y, z), edge_index as usize, 0.0);
                 }
@@ -199,7 +199,7 @@ fn make_vertex_interpolation(
 fn get_triangulation(
     discrete_scalar_field: &DiscreteScalarField,
     (x, y, z): (usize, usize, usize),
-) -> [usize; 16] {
+) -> [i8; 16] {
     let mut triangulation_index = 0;
 
     if discrete_scalar_field(  x  ,  y  ,  z  ) > 0.0 { triangulation_index |= 1 << 0; };
