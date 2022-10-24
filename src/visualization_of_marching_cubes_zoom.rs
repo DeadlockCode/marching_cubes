@@ -16,8 +16,8 @@ enum TimeStage {
 }
 
 const TIMINGS: Timings = Timings {
-    timings:  [1.0, 1.0, 1.0, 1.0, 1.0],
-    delays: [1.0, 1.0, 1.0, 1.0, 1.0],
+    timings:  [1.0, 4.0, 4.0, 6.0, 1.0],
+    delays: [2.0, 1.0, 1.0, 1.0, 1.0],
 };
 
 
@@ -104,7 +104,7 @@ fn cube_expantion_system(
 
     let mut boundary = boundaries.single_mut();
 
-    boundary.scale = Vec3::splat(t);
+    boundary.scale = Vec3::splat(t * (2.0 - t));
 }
 
 fn spawn_points(
@@ -157,7 +157,7 @@ fn point_system(
     let current_number = (t2 * 8.0) as usize;
     for (mut transform, mut visibility, point) in points.iter_mut() {
         let p = march_tables::POINTS[point.index];
-        transform.translation = (Vec3::new(p.0 as f32, p.1 as f32, p.2 as f32) - Vec3::splat(0.5)) * t0;
+        transform.translation = (Vec3::new(p.0 as f32, p.1 as f32, p.2 as f32) - Vec3::splat(0.5)) * (t0 * (2.0 - t0));
         visibility.is_visible = current_point >= point.index && current_number <= point.index;
     }
 }
