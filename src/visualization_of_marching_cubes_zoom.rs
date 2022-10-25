@@ -2,7 +2,7 @@ use super::*;
 
 use crate::{visualization_helper::*, marching_cubes::march_tables, normal_material::NormalMaterial};
 
-use bevy::{render::{mesh::Indices, render_resource::Face}, log::LogSettings};
+use bevy::{render::{mesh::Indices, render_resource::Face}, log::LogSettings, pbr::wireframe::{WireframePlugin, WireframeConfig}};
 use bevy_inspector_egui::{WorldInspectorPlugin, RegisterInspectable};
 
 use ttf2mesh::{Value, TTFFile};
@@ -69,6 +69,7 @@ pub fn start() {
         })
         .add_plugins(DefaultPlugins)
         .add_plugin(WorldInspectorPlugin::new())
+        .add_plugin(WireframePlugin)
 
         .add_startup_system(spawn_camera)
         .add_system(camera_system)
@@ -361,9 +362,12 @@ fn activate_corner_system(
 
 fn spawn_mesh_holder(
     mut commands: Commands,
+    mut wireframe_config: ResMut<WireframeConfig>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
+    wireframe_config.global = true;
+
     commands.spawn_bundle(MaterialMeshBundle {
         mesh: meshes.add(Mesh::new(bevy::render::render_resource::PrimitiveTopology::TriangleList)),
         material: materials.add(StandardMaterial {
