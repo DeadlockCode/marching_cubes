@@ -2,8 +2,8 @@ use crate::{normal_material::NormalMaterial, cube_sphere::spawn_cube_sphere};
 
 use super::*;
 
-use bevy::{input::mouse::MouseMotion, render::{settings::{WgpuSettings, WgpuFeatures}, mesh::Indices}, pbr::wireframe::{WireframePlugin, WireframeConfig}, log::LogSettings};
-use bevy_inspector_egui::WorldInspectorPlugin;
+use bevy::{input::mouse::MouseMotion, render::{settings::{WgpuSettings, WgpuFeatures}, mesh::Indices, camera::CameraProjectionPlugin}, pbr::wireframe::{WireframePlugin, WireframeConfig}, log::LogSettings};
+use bevy_inspector_egui::{WorldInspectorPlugin, RegisterInspectable, Inspectable};
 use noise::{NoiseFn, Perlin, Fbm};
 
 pub const MOVE_SPEED: f32 = 30.0;
@@ -16,7 +16,7 @@ pub fn start() {
             ..default()
         })
         .insert_resource(Msaa { samples: 4 })
-        .insert_resource(ClearColor(Color::BLACK))
+        .insert_resource(ClearColor(Color::rgb_linear(0.37, 1.0, 0.73)))
         .insert_resource(WindowDescriptor {
             width: WIDTH,
             height: HEIGHT,
@@ -40,6 +40,7 @@ pub fn start() {
 
         .add_startup_system(spawn_directional_light)
         .add_system(update_camera)
+
         //.add_system(update_surface_nets)
         .run();
 }
@@ -48,39 +49,39 @@ fn update_camera(
     keys: Res<Input<KeyCode>>,
     buttons: Res<Input<MouseButton>>,
     mut motion_evr: EventReader<MouseMotion>,
-    mut cameras: Query<(&mut Transform, &Camera3d)>,
+    mut q_camera: Query<&mut Transform, &Camera>,
     time: Res<Time>,
 ) {
     let delta = time.delta().as_secs_f32();
 
-    for (mut camera, _) in &mut cameras {
-        if keys.pressed(KeyCode::Space) {
-            camera.translation.y += delta * MOVE_SPEED;
-        }
-        if keys.pressed(KeyCode::LControl) {
-            camera.translation.y -= delta * MOVE_SPEED;
-        }
-        if keys.pressed(KeyCode::W) {
-            let dir = camera.forward();
-            camera.translation += dir * delta * MOVE_SPEED;
-        }
-        if keys.pressed(KeyCode::A) {
-            let dir = -camera.left(); // negative because camera x scale is negative to create left-handed coordinate system
-            camera.translation += dir * delta * MOVE_SPEED;
-        }
-        if keys.pressed(KeyCode::S) {
-            let dir = camera.back();
-            camera.translation += dir * delta * MOVE_SPEED;
-        }
-        if keys.pressed(KeyCode::D) {
-            let dir = -camera.right(); // negative because camera x scale is negative to create left-handed coordinate system
-            camera.translation += dir * delta * MOVE_SPEED;
-        }
-        if buttons.pressed(MouseButton::Left) {
-            for ev in motion_evr.iter() {
-                camera.rotate_local_axis(Vec3::X, -ev.delta.y * delta * SENSITIVITY);
-                camera.rotate_axis(Vec3::Y, ev.delta.x * delta * SENSITIVITY);
-            }
+    let mut camera_transform = q_camera.single_mut();
+
+    if keys.pressed(KeyCode::Space) {
+        camera_transform.translation.y += delta * MOVE_SPEED;
+    }
+    if keys.pressed(KeyCode::LControl) {
+        camera_transform.translation.y -= delta * MOVE_SPEED;
+    }
+    if keys.pressed(KeyCode::W) {
+        let dir = camera_transform.forward();
+        camera_transform.translation += dir * delta * MOVE_SPEED;
+    }
+    if keys.pressed(KeyCode::A) {
+        let dir = -camera_transform.left(); // negative because camera x scale is negative to create left-handed coordinate system
+        camera_transform.translation += dir * delta * MOVE_SPEED;
+    }
+    if keys.pressed(KeyCode::S) {
+        let dir = camera_transform.back();
+        camera_transform.translation += dir * delta * MOVE_SPEED;
+    }
+    if keys.pressed(KeyCode::D) {
+        let dir = -camera_transform.right(); // negative because camera x scale is negative to create left-handed coordinate system
+        camera_transform.translation += dir * delta * MOVE_SPEED;
+    }
+    if buttons.pressed(MouseButton::Left) {
+        for ev in motion_evr.iter() {
+            camera_transform.rotate_local_axis(Vec3::X, -ev.delta.y * delta * SENSITIVITY);
+            camera_transform.rotate_axis(Vec3::Y, ev.delta.x * delta * SENSITIVITY);
         }
     }
 }

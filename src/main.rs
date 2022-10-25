@@ -8,10 +8,10 @@ pub mod visualization_helper;
 pub mod normal_material;
 pub mod cube_sphere;
 
-use std::f32::consts::PI;
+use std::f32::consts::TAU;
 
 pub use bevy::prelude::*;
-use bevy::render::camera::Projection;
+use bevy::render::{camera::{Projection, DepthCalculation, CameraProjection, ComputedCameraValues}, primitives::Frustum};
 
 pub const WIDTH: f32 = 1280.0;
 pub const HEIGHT: f32 = 720.0;
@@ -65,25 +65,34 @@ fn camera_system (
 ) {
     let mut camera = cameras.single_mut();
 
-    let t = time.seconds_since_startup() as f32 * 2.0 * PI / 60.0;
+    let t = time.seconds_since_startup() as f32 * TAU / 60.0;
 
     camera.translation = Vec3::new(-t.sin() * 2.2, 1.0, -t.cos() * 2.2);
-    camera.look_at(Vec3::new(0.0, -0.15, 0.0), Vec3::Y)
+    camera.look_at(Vec3::new(0.0, -0.15, 0.0), Vec3::Y);
 }
 
 fn spawn_camera(mut commands: Commands) {
     commands.spawn_bundle(Camera3dBundle {
-        transform: Transform::from_xyz(0.0, 0.0, 0.0).with_scale(Vec3::new(-1.0, 1.0, 1.0)),
-        projection: Projection::Perspective(PerspectiveProjection { fov: 0.65, ..Default::default() }),
+        camera: Camera {
+            depth_calculation: DepthCalculation::ZDifference,
+            ..Default::default()
+        },
+        projection: Projection::Perspective(PerspectiveProjection { 
+            fov: 0.65,
+            ..Default::default()
+        }),
+        transform: Transform::from_scale(Vec3::new(-1.0, 1.0, 1.0)),
         ..Default::default()
     })
     .insert(Name::new("Camera"));
 }
 
 fn coords(size: usize) -> impl Iterator<Item = (usize, usize, usize)> {
-    (0..size).flat_map(move |z| {
+    (0..size)
+    .flat_map(move |z| {
         (0..size).map(move |y| (y, z))
-    }).flat_map(move |(y, z)| {
+    })
+    .flat_map(move |(y, z)| {
         (0..size).map(move |x| (x, y, z))
     })
 }
