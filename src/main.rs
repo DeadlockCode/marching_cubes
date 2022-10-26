@@ -16,7 +16,7 @@ use bevy::render::{camera::{Projection, DepthCalculation, CameraProjection, Comp
 pub const WIDTH: f32 = 1280.0;
 pub const HEIGHT: f32 = 720.0;
 
-const APP: u32 = 0;
+const APP: u32 = 2;
 
 fn main() {
     match APP {
