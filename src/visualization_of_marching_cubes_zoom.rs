@@ -360,14 +360,14 @@ fn activate_corner_system(
     }
 }
 
+#[derive(Component)]
+struct WireframeHolder;
+
 fn spawn_mesh_holder(
     mut commands: Commands,
-    mut wireframe_config: ResMut<WireframeConfig>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    wireframe_config.global = true;
-
     commands.spawn_bundle(MaterialMeshBundle {
         mesh: meshes.add(Mesh::new(bevy::render::render_resource::PrimitiveTopology::TriangleList)),
         material: materials.add(StandardMaterial {
@@ -382,11 +382,29 @@ fn spawn_mesh_holder(
         transform: Transform::from_translation(-Vec3::splat(0.5)),
         ..Default::default()
     }).insert(Name::new("Mesh"))
-    .insert(MeshHolder {});
+    .insert(MeshHolder {})
+    .with_children(|builder| {
+        builder.spawn_bundle(MaterialMeshBundle {
+            mesh: meshes.add(Mesh::new(bevy::render::render_resource::PrimitiveTopology::LineList)),
+            material: materials.add(StandardMaterial {
+                base_color: Color::WHITE,
+                emissive: Color::BLACK,
+                perceptual_roughness: 1.0,
+                metallic: 0.0,
+                reflectance: 0.0,
+                unlit: true,
+                cull_mode: None,
+                ..Default::default()
+            }),
+            ..Default::default()
+        }).insert(WireframeHolder);
+    });
 }
 
 fn mesh_system(
-    q_mesh: Query<&Handle<Mesh>, (With<MeshHolder>, Without<CornerNumber>)>,
+    q_mesh: Query<&Handle<Mesh>, (With<MeshHolder>, Without<WireframeHolder>, Without<CornerNumber>)>,
+    mut q_wireframe: Query<(&Handle<Mesh>, &mut Transform), (With<WireframeHolder>, Without<MeshHolder>, Without<CornerNumber>)>,
+    q_camera: Query<&Transform, (With<Camera>, Without<WireframeHolder>, Without<MeshHolder>, Without<CornerNumber>)>,
     mut meshes: ResMut<Assets<Mesh>>,
     numbers: Query<(&Handle<StandardMaterial>, &CornerNumber)>,
 ) {
@@ -429,11 +447,35 @@ fn mesh_system(
         normals.push(n);
         normals.push(n);
     }
+    
+    let mut wires = Vec::<[f32; 3]>::new();
+
+    for i in 0..positions.len()/3 {
+        wires.push(positions[i * 3 + 0]);
+        wires.push(positions[i * 3 + 1]);
+        wires.push(positions[i * 3 + 1]);
+        wires.push(positions[i * 3 + 2]);
+        wires.push(positions[i * 3 + 2]);
+        wires.push(positions[i * 3 + 0]);
+    }
+
+    let wire_normals = vec![[0.0; 3]; wires.len()];
+
+    let (wireframe_handle, mut wireframe_transform) = q_wireframe.single_mut();
+
+    let wireframe = meshes.get_mut(wireframe_handle).unwrap();
+
+    wireframe.insert_attribute(Mesh::ATTRIBUTE_POSITION, wires);
+    wireframe.insert_attribute(Mesh::ATTRIBUTE_NORMAL, wire_normals);
 
     let mesh = meshes.get_mut(q_mesh.single()).unwrap();
 
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+
+
+    let camera_transform = q_camera.single();
+    wireframe_transform.translation = -camera_transform.forward() * 0.01;
 }
 
 fn mesh_from_char(
