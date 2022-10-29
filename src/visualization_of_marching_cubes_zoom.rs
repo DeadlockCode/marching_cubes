@@ -2,7 +2,7 @@ use super::*;
 
 use crate::{visualization_helper::*, marching_cubes::march_tables, normal_material::NormalMaterial};
 
-use bevy::{render::{mesh::Indices, render_resource::Face}, log::LogSettings, pbr::wireframe::{WireframePlugin, WireframeConfig}};
+use bevy::{render::{mesh::Indices, render_resource::Face}, log::LogSettings, pbr::wireframe::{WireframePlugin, WireframeConfig}, window::WindowMode};
 use bevy_inspector_egui::{WorldInspectorPlugin, RegisterInspectable};
 
 use ttf2mesh::{Value, TTFFile};
@@ -16,8 +16,8 @@ enum TimeStage {
 }
 
 const TIMINGS: Timings = Timings {
-    timings:  [1.0, 4.0, 4.0, 6.0, 1.0],
-    delays: [2.0, 1.0, 1.0, 1.0, 1.0],
+    timings:  [1.0, 2.0, 2.0, 3.0, 1.0],
+    delays: [5.0, 2.0, 7.0, 6.0, 1.0],
 };
 
 
@@ -57,10 +57,7 @@ pub fn start() {
         .insert_resource(Msaa { samples: 4 })
         .insert_resource(ClearColor(Color::rgb_u8(20, 20, 20)))
         .insert_resource(WindowDescriptor {
-            width: WIDTH,
-            height: HEIGHT,
-            title: "Marching Cubes".to_string(),
-            resizable: true,
+            mode: WindowMode::Fullscreen,
             ..Default::default()
         })
         .insert_resource(LogSettings {
@@ -122,7 +119,7 @@ fn spawn_points(
 
     let shared_mesh = meshes.add(mesh);
     let shared_material = materials.add(StandardMaterial {
-        base_color: Color::WHITE, 
+        base_color: Color::DARK_GRAY, 
         unlit: true,
         ..Default::default()
     });
@@ -355,7 +352,7 @@ fn activate_corner_system(
             let string: String = numbers.iter().map(|(_, _, corner)| {
                 ('0' as u8 + corner.active as u8) as char
             }).collect();
-            println!("{}", string);
+            println!("{}", string.chars().rev().collect::<String>());
         }
     }
 }
@@ -379,7 +376,6 @@ fn spawn_mesh_holder(
             cull_mode: None,
             ..Default::default()
         }),
-        transform: Transform::from_translation(-Vec3::splat(0.5)),
         ..Default::default()
     }).insert(Name::new("Mesh"))
     .insert(MeshHolder {})
@@ -429,7 +425,7 @@ fn mesh_system(
         let pos_a: Vec3 = Vec3::new(x0 as f32, y0 as f32, z0 as f32);
         let pos_b: Vec3 = Vec3::new(x1 as f32, y1 as f32, z1 as f32);
     
-        let position = ((pos_a + pos_b) * 0.5).into();
+        let position = ((pos_a + pos_b - Vec3::splat(1.0)) * 0.5).into();
 
         positions.push(position);
     }
@@ -468,14 +464,14 @@ fn mesh_system(
     wireframe.insert_attribute(Mesh::ATTRIBUTE_POSITION, wires);
     wireframe.insert_attribute(Mesh::ATTRIBUTE_NORMAL, wire_normals);
 
+    let camera_transform = q_camera.single();
+    wireframe_transform.translation = camera_transform.translation * 0.001;
+    wireframe_transform.scale = Vec3::ONE * 0.999;
+
     let mesh = meshes.get_mut(q_mesh.single()).unwrap();
 
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
-
-
-    let camera_transform = q_camera.single();
-    wireframe_transform.translation = -camera_transform.forward() * 0.01;
 }
 
 fn mesh_from_char(
@@ -506,4 +502,16 @@ fn mesh_from_char(
     let normals = vec![[0.0, 0.0, -1.0]; positions.len()];
 
     (positions, normals, indices)
+}
+
+fn camera_system (
+    mut cameras: Query<&mut Transform, With<Camera3d>>,
+    time: Res<Time>,
+) {
+    let mut camera = cameras.single_mut();
+
+    let t = (time.seconds_since_startup() as f32 - TIMINGS.delays[0]).max(0.0) * TAU / 90.0;
+
+    camera.translation = Vec3::new(t.sin() * 2.2, 1.0, -t.cos() * 2.2);
+    camera.look_at(Vec3::new(0.0, -0.15, 0.0), Vec3::Y);
 }

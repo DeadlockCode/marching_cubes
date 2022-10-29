@@ -2,12 +2,12 @@ use crate::marching_cubes::march_tables;
 
 use super::*;
 
-use bevy::{render::mesh::Indices, log::LogSettings};
+use bevy::{render::mesh::Indices, log::LogSettings, window::WindowMode};
 use bevy_inspector_egui::{WorldInspectorPlugin, Inspectable, RegisterInspectable};
 
 use crate::visualization_helper::*;
 
-const RES: usize = 16;
+const RES: usize = 12;
 
 enum TimeStage {
     ShowGridPoints,
@@ -19,7 +19,7 @@ enum TimeStage {
 
 const TIMINGS: Timings = Timings {
     timings:  [10.0, 2.0, 30.0, 2.0, 0.5],
-    delays: [2.5, 5.0, 2.0, 2.0, 5.0],
+    delays: [5.0, 5.0, 2.0, 2.0, 5.0],
 };
 
 #[derive(Component)]
@@ -69,10 +69,7 @@ pub fn start() {
         .insert_resource(Msaa { samples: 4 })
         .insert_resource(ClearColor(Color::rgb_u8(20, 20, 20)))
         .insert_resource(WindowDescriptor {
-            width: WIDTH,
-            height: HEIGHT,
-            title: "Marching Cubes".to_string(),
-            resizable: true,
+            mode: WindowMode::Fullscreen,
             ..Default::default()
         })
         .insert_resource(LogSettings {
@@ -150,7 +147,7 @@ fn spawn_grid_points(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    let (positions, normals, indices) = circle_fan::circle_fan(8);
+    let (positions, normals, indices) = circle_fan::circle_fan(12);
 
     let mut mesh = Mesh::new(bevy::render::render_resource::PrimitiveTopology::TriangleList);
     mesh.set_indices(Some(Indices::U32(indices)));
@@ -160,18 +157,21 @@ fn spawn_grid_points(
     let shared_mesh = meshes.add(mesh);
 
     let mut largest = f32::MIN;
-    let mut smallest = f32::MAX;
 
-    let points = coords(RES + 1)
-        .map(|(x, y, z)| {
-            let val = SCALAR_FIELD(x as f32, y as f32, z as f32);
+    const GRID_RES: usize = RES + 1;
 
-            largest = largest.max(val);
-            smallest = smallest.min(val);
+    let mut points = Vec::<f32>::with_capacity(GRID_RES * GRID_RES * GRID_RES);
 
-            val
-        })
-        .collect::<Vec<_>>();
+    for z in 0..GRID_RES {
+        for y in 0..GRID_RES {
+            for x in 0..GRID_RES {
+                let val = SCALAR_FIELD(x as f32, y as f32, z as f32);
+                largest = largest.max(val);
+                points.push(val);
+            }
+        }
+    }
+
     let discrete_scalar_field = &move |x, y, z| -> f32 {
         points[x + y * (RES + 1) + z * (RES + 1) * (RES + 1)] / largest
     };
@@ -202,13 +202,10 @@ fn spawn_grid_points(
         }
     });
 
-
     commands.spawn().insert(Isosurface {
         isolevel: 1.0,
         max_value: largest,
     }).insert(Name::new("Isosurface"));
-
-    println!("min: {}, max: {}", smallest, largest);
 }
 
 fn isolevel_system(
@@ -375,4 +372,16 @@ fn interpolate_mesh_system(
         mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
         mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
     }
+}
+
+fn camera_system (
+    mut cameras: Query<&mut Transform, With<Camera3d>>,
+    time: Res<Time>,
+) {
+    let mut camera = cameras.single_mut();
+
+    let t = (time.seconds_since_startup() as f32 - TIMINGS.delays[0]) * TAU / 60.0;
+
+    camera.translation = Vec3::new(-t.sin() * 2.2, 1.0, t.cos() * 2.2);
+    camera.look_at(Vec3::new(0.0, -0.15, 0.0), Vec3::Y);
 }
