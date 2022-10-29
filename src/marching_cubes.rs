@@ -14,12 +14,20 @@ pub fn marching_cubes(
 ) -> (Vec<[f32; 3]>, Vec<[f32; 3]>, Vec<u32>) {
     let sw = Stopwatch::start_new();
 
-    let axis_length = resolution + 1;
-    let grid = coords(axis_length)
-        .map(|(x, y, z)| scalar_field(x as f32, y as f32, z as f32))
-        .collect::<Vec<_>>();
+    let grid_resolution = resolution + 1;
+
+    let mut grid = Vec::<f32>::with_capacity(grid_resolution * grid_resolution * grid_resolution);
+
+    for z in 0..grid_resolution {
+        for y in 0..grid_resolution {
+            for x in 0..grid_resolution {
+                grid.push(scalar_field(x as f32, y as f32, z as f32));
+            }
+        }
+    }
+
     let discrete_scalar_field = &move |x, y, z| {
-        grid[x + y * axis_length + z * axis_length * axis_length]
+        grid[x + y * grid_resolution + z * grid_resolution * grid_resolution]
     };
 
     let mut positions = Vec::<[f32; 3]>::new();
@@ -29,14 +37,7 @@ pub fn marching_cubes(
     for z in 0..resolution {
         for y in 0..resolution {
             for x in 0..resolution {
-                
-                let triangulation = get_triangulation(discrete_scalar_field, (x, y, z));
-
-                for edge_index in triangulation {
-                    if edge_index == -1 { break; }
-
-                    make_vertex(discrete_scalar_field, &mut positions, &mut edge_to_index, &mut indices, (x, y, z), edge_index as usize);
-                }
+                march_cube(discrete_scalar_field, (x, y, z), &mut positions, &mut indices, &mut edge_to_index, resolution);
             }
         }
     }
@@ -48,18 +49,68 @@ pub fn marching_cubes(
     (positions, normals, indices)
 }
 
+fn march_cube(
+    discrete_scalar_field: &DiscreteScalarField,
+    (x, y, z): (usize, usize, usize),
+    positions: &mut Vec<[f32; 3]>,
+    indices: &mut Vec<u32>,
+    edge_to_index: &mut HashMap<(usize, usize, usize), u32>,
+    resolution: usize,
+) {
+    let triangulation = get_triangulation(discrete_scalar_field, (x, y, z));
+
+    for edge_index in triangulation {
+        if edge_index == -1 { break; }
+
+        let point_index = march_tables::EDGES[edge_index as usize];
+
+        let (x0, y0, z0) = march_tables::POINTS[point_index.0];
+        let (x1, y1, z1) = march_tables::POINTS[point_index.1];
+    
+        let edge = (x * 2 + x0 + x1, y * 2 + y0 + y1, z * 2 + z0 + z1);
+    
+        match edge_to_index.get(&edge) {
+            Some(i) => indices.push(*i),
+            None => {
+                let pos_a = Vec3::new((x + x0) as f32, (y + y0) as f32, (z + z0) as f32);
+                let pos_b = Vec3::new((x + x1) as f32, (y + y1) as f32, (z + z1) as f32);
+            
+                let val_a = discrete_scalar_field(x + x0, y + y0, z + z0);
+                let val_b = discrete_scalar_field(x + x1, y + y1, z + z1);
+            
+                let t = val_a / (val_a - val_b);
+            
+                let position = (pos_a + (pos_b - pos_a) * t).into();
+            
+                indices.push(positions.len() as u32);
+                edge_to_index.insert(edge, positions.len() as u32);
+                positions.push(position);
+            },
+        }
+    }
+}
+
 pub fn marching_cubes_interpolation(
     resolution: usize,
     scalar_field: &ScalarField,
     interpolate: f32,
     normal_weight: f32,
 ) -> (Vec<[f32; 3]>, Vec<[f32; 3]>){
-    let axis_length = resolution + 1;
-    let grid = coords(axis_length)
-        .map(|(x, y, z)| scalar_field(x as f32, y as f32, z as f32))
-        .collect::<Vec<_>>();
+
+    let grid_resolution = resolution + 1;
+
+    let mut grid = Vec::<f32>::with_capacity(grid_resolution * grid_resolution * grid_resolution);
+
+    for z in 0..grid_resolution {
+        for y in 0..grid_resolution {
+            for x in 0..grid_resolution {
+                grid.push(scalar_field(x as f32, y as f32, z as f32));
+            }
+        }
+    }
+
     let discrete_scalar_field = &move |x, y, z| {
-        unsafe { *grid.get_unchecked(x + y * axis_length + z * axis_length * axis_length) }
+        grid[x + y * grid_resolution + z * grid_resolution * grid_resolution]
     };
 
     let mut positions = Vec::<[f32; 3]>::new();
@@ -98,14 +149,20 @@ pub fn marching_cubes_disjointed(
     resolution: usize,
     scalar_field: &ScalarField,
 ) -> Vec<Vec<[f32; 3]>> {
-    let sw = Stopwatch::start_new();
+    let grid_resolution = resolution + 1;
 
-    let axis_length = resolution + 1;
-    let grid = coords(axis_length)
-        .map(|(x, y, z)| scalar_field(x as f32, y as f32, z as f32))
-        .collect::<Vec<_>>();
+    let mut grid = Vec::<f32>::with_capacity(grid_resolution * grid_resolution * grid_resolution);
+
+    for z in 0..grid_resolution {
+        for y in 0..grid_resolution {
+            for x in 0..grid_resolution {
+                grid.push(scalar_field(x as f32, y as f32, z as f32));
+            }
+        }
+    }
+
     let discrete_scalar_field = &move |x, y, z| {
-        grid[x + y * axis_length + z * axis_length * axis_length]
+        grid[x + y * grid_resolution + z * grid_resolution * grid_resolution]
     };
 
     let mut positions_vec = Vec::new();
@@ -129,44 +186,7 @@ pub fn marching_cubes_disjointed(
         }
     }
 
-    println!("Marching cubes took: {}ms", sw.elapsed_ms());
-
     positions_vec
-}
-
-fn make_vertex(
-    discrete_scalar_field: &DiscreteScalarField,
-    positions: &mut Vec<[f32; 3]>,
-    edge_to_index: &mut HashMap<(usize, usize, usize), u32>,
-    indices: &mut Vec<u32>,
-    (x, y, z): (usize, usize, usize),
-    edge_index: usize,
-) {
-    let point_index = march_tables::EDGES[edge_index];
-
-    let (x0, y0, z0) = march_tables::POINTS[point_index.0];
-    let (x1, y1, z1) = march_tables::POINTS[point_index.1];
-
-    let edge = (x * 2 + x0 + x1, y * 2 + y0 + y1, z * 2 + z0 + z1);
-
-    match edge_to_index.get(&edge) {
-        Some(i) => indices.push(*i),
-        None => {
-            let pos_a: Vec3 = Vec3::new((x + x0) as f32, (y + y0) as f32, (z + z0) as f32);
-            let pos_b: Vec3 = Vec3::new((x + x1) as f32, (y + y1) as f32, (z + z1) as f32);
-        
-            let val_a = discrete_scalar_field(pos_a.x as usize, pos_a.y as usize, pos_a.z as usize);
-            let val_b = discrete_scalar_field(pos_b.x as usize, pos_b.y as usize, pos_b.z as usize);
-        
-            let t = val_a / (val_a - val_b);
-        
-            let position = (pos_a + (pos_b - pos_a) * t).into();
-        
-            indices.push(positions.len() as u32);
-            edge_to_index.insert(edge, positions.len() as u32);
-            positions.push(position);
-        },
-    }
 }
 
 fn make_vertex_interpolation(
@@ -199,17 +219,17 @@ fn make_vertex_interpolation(
 fn get_triangulation(
     discrete_scalar_field: &DiscreteScalarField,
     (x, y, z): (usize, usize, usize),
-) -> [i8; 16] {
+) -> [i8; 15] {
     let mut triangulation_index = 0;
 
-    if discrete_scalar_field(  x  ,  y  ,  z  ) > 0.0 { triangulation_index |= 1 << 0; };
-    if discrete_scalar_field(  x  ,  y  ,z + 1) > 0.0 { triangulation_index |= 1 << 1; };
-    if discrete_scalar_field(x + 1,  y  ,z + 1) > 0.0 { triangulation_index |= 1 << 2; };
-    if discrete_scalar_field(x + 1,  y  ,  z  ) > 0.0 { triangulation_index |= 1 << 3; };
-    if discrete_scalar_field(  x  ,y + 1,  z  ) > 0.0 { triangulation_index |= 1 << 4; };
-    if discrete_scalar_field(  x  ,y + 1,z + 1) > 0.0 { triangulation_index |= 1 << 5; };
-    if discrete_scalar_field(x + 1,y + 1,z + 1) > 0.0 { triangulation_index |= 1 << 6; };
-    if discrete_scalar_field(x + 1,y + 1,  z  ) > 0.0 { triangulation_index |= 1 << 7; };
+    if discrete_scalar_field(  x  ,  y  ,  z  ) < 0.0 { triangulation_index |= 1 << 0; };
+    if discrete_scalar_field(  x  ,  y  ,z + 1) < 0.0 { triangulation_index |= 1 << 1; };
+    if discrete_scalar_field(x + 1,  y  ,z + 1) < 0.0 { triangulation_index |= 1 << 2; };
+    if discrete_scalar_field(x + 1,  y  ,  z  ) < 0.0 { triangulation_index |= 1 << 3; };
+    if discrete_scalar_field(  x  ,y + 1,  z  ) < 0.0 { triangulation_index |= 1 << 4; };
+    if discrete_scalar_field(  x  ,y + 1,z + 1) < 0.0 { triangulation_index |= 1 << 5; };
+    if discrete_scalar_field(x + 1,y + 1,z + 1) < 0.0 { triangulation_index |= 1 << 6; };
+    if discrete_scalar_field(x + 1,y + 1,  z  ) < 0.0 { triangulation_index |= 1 << 7; };
     
     march_tables::TRIANGULATIONS[triangulation_index]
 }

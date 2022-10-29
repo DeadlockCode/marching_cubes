@@ -8,7 +8,7 @@ pub mod visualization_helper;
 pub mod normal_material;
 pub mod cube_sphere;
 
-use std::f32::consts::TAU;
+use std::{f32::consts::TAU, env};
 
 pub use bevy::prelude::*;
 use bevy::render::{camera::{Projection, DepthCalculation, CameraProjection, ComputedCameraValues}, primitives::Frustum};
@@ -19,7 +19,10 @@ pub const HEIGHT: f32 = 720.0;
 const APP: u32 = 2;
 
 fn main() {
-    match APP {
+    let args: Vec<String> = env::args().collect();
+    let app = args[1].chars().next().unwrap() as u8 - '0' as u8;
+
+    match app {
         0 => showcase::start(),
         1 => visualization_of_marching_cubes_full::start(),
         2 => visualization_of_marching_cubes_zoom::start(),
@@ -38,7 +41,7 @@ fn spawn_point_light(
             radius: 5.0,
             ..Default::default()
         },
-        transform: Transform::from_xyz(0.75, 1.0, 1.0),
+        transform: Transform::from_xyz(-1.0, 1.0, 1.0),
         ..Default::default()
     })
     .insert(Name::new("Light"));
@@ -59,18 +62,6 @@ fn spawn_directional_light(
     .insert(Name::new("Light"));
 }
 
-fn camera_system (
-    mut cameras: Query<&mut Transform, With<Camera3d>>,
-    time: Res<Time>,
-) {
-    let mut camera = cameras.single_mut();
-
-    let t = time.seconds_since_startup() as f32 * TAU / 60.0;
-
-    camera.translation = Vec3::new(-t.sin() * 2.2, 1.0, -t.cos() * 2.2);
-    camera.look_at(Vec3::new(0.0, -0.15, 0.0), Vec3::Y);
-}
-
 fn spawn_camera(mut commands: Commands) {
     commands.spawn_bundle(Camera3dBundle {
         camera: Camera {
@@ -85,14 +76,4 @@ fn spawn_camera(mut commands: Commands) {
         ..Default::default()
     })
     .insert(Name::new("Camera"));
-}
-
-fn coords(size: usize) -> impl Iterator<Item = (usize, usize, usize)> {
-    (0..size)
-    .flat_map(move |z| {
-        (0..size).map(move |y| (y, z))
-    })
-    .flat_map(move |(y, z)| {
-        (0..size).map(move |x| (x, y, z))
-    })
 }

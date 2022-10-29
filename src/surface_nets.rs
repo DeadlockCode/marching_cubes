@@ -9,16 +9,24 @@ use super::*;
 // Main algorithm driver.
 pub fn surface_net(
     resolution: usize,
-    signed_distance_field: &ScalarField,
+    scalar_field: &ScalarField,
 ) -> (Vec<[f32; 3]>, Vec<[f32; 3]>, Vec<u32>) {
     let sw = Stopwatch::start_new();
 
-    let axis_length = resolution + 1;
-    let grid = coords(axis_length)
-        .map(|(x, y, z)| signed_distance_field(x as f32, y as f32, z as f32))
-        .collect::<Vec<_>>();
+    let grid_resolution = resolution + 1;
+
+    let mut grid = Vec::<f32>::with_capacity(grid_resolution * grid_resolution * grid_resolution);
+
+    for z in 0..grid_resolution {
+        for y in 0..grid_resolution {
+            for x in 0..grid_resolution {
+                grid.push(scalar_field(x as f32, y as f32, z as f32));
+            }
+        }
+    }
+
     let discrete_scalar_field = &move |x, y, z| {
-        grid[x + y * axis_length + z * axis_length * axis_length]
+        grid[x + y * grid_resolution + z * grid_resolution * grid_resolution]
     };
 
     let mut positions = Vec::new();
@@ -26,11 +34,15 @@ pub fn surface_net(
     let mut grid_to_index = HashMap::new();
     // Find all vertex positions. Addtionally, create a hashmap from grid
     // position to index.
-    for coord in coords(resolution) {
-        if let Some((center, normal)) = find_center(discrete_scalar_field, coord) {
-            grid_to_index.insert(coord, positions.len());
-            positions.push(center);
-            normals.push(normal);
+    for z in 0..resolution {
+        for y in 0..resolution {
+            for x in 0..resolution {
+                if let Some((center, normal)) = find_center(discrete_scalar_field, (x, y, z)) {
+                    grid_to_index.insert((x, y, z), positions.len());
+                    positions.push(center);
+                    normals.push(normal);
+                }
+            }
         }
     }
     
@@ -137,46 +149,50 @@ fn make_all_triangles(
     positions: &[[f32; 3]],
     indices: &mut Vec<u32>,
 ) {
-    for coord in coords(resolution) {
-        // TODO: Cache discrete_scalar_field(coord), it's called three times here.
-        // Do edges parallel with the X axis
-        if coord.1 != 0 && coord.2 != 0 {
-            make_triangle(
-                discrete_scalar_field,
-                grid_to_index,
-                positions,
-                indices,
-                coord,
-                (1, 0, 0),
-                (0, 1, 0),
-                (0, 0, 1),
-            );
-        }
-        // Do edges parallel with the Y axis
-        if coord.0 != 0 && coord.2 != 0 {
-            make_triangle(
-                discrete_scalar_field,
-                grid_to_index,
-                positions,
-                indices,
-                coord,
-                (0, 1, 0),
-                (0, 0, 1),
-                (1, 0, 0),
-            );
-        }
-        // Do edges parallel with the Z axis
-        if coord.0 != 0 && coord.1 != 0 {
-            make_triangle(
-                discrete_scalar_field,
-                grid_to_index,
-                positions,
-                indices,
-                coord,
-                (0, 0, 1),
-                (1, 0, 0),
-                (0, 1, 0),
-            );
+    for z in 0..resolution {
+        for y in 0..resolution {
+            for x in 0..resolution {
+                // TODO: Cache discrete_scalar_field(coord), it's called three times here.
+                // Do edges parallel with the X axis
+                if y != 0 && z != 0 {
+                    make_triangle(
+                        discrete_scalar_field,
+                        grid_to_index,
+                        positions,
+                        indices,
+                        (x, y, z),
+                        (1, 0, 0),
+                        (0, 1, 0),
+                        (0, 0, 1),
+                    );
+                }
+                // Do edges parallel with the Y axis
+                if x != 0 && z != 0 {
+                    make_triangle(
+                        discrete_scalar_field,
+                        grid_to_index,
+                        positions,
+                        indices,
+                        (x, y, z),
+                        (0, 1, 0),
+                        (0, 0, 1),
+                        (1, 0, 0),
+                    );
+                }
+                // Do edges parallel with the Z axis
+                if x != 0 && y != 0 {
+                    make_triangle(
+                        discrete_scalar_field,
+                        grid_to_index,
+                        positions,
+                        indices,
+                        (x, y, z),
+                        (0, 0, 1),
+                        (1, 0, 0),
+                        (0, 1, 0),
+                    );
+                }
+            }
         }
     }
 }
