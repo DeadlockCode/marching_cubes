@@ -16,8 +16,6 @@ use bevy::render::{camera::{Projection, DepthCalculation, CameraProjection, Comp
 pub const WIDTH: f32 = 1280.0;
 pub const HEIGHT: f32 = 720.0;
 
-const APP: u32 = 2;
-
 fn main() {
     let args: Vec<String> = env::args().collect();
     let app = args[1].chars().next().unwrap() as u8 - '0' as u8;
