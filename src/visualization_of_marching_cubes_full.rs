@@ -255,6 +255,7 @@ fn spawn_grid_mesh(
             perceptual_roughness: 1.0,
             metallic: 0.0,
             reflectance: 0.0,
+            double_sided: true,
             cull_mode: None,
             ..Default::default()
         });
@@ -271,10 +272,19 @@ fn spawn_grid_mesh(
                     let idx = x + y * RES + z * RES * RES;
 
                     let positions = positions_vec[idx].clone();
+
+                    let normals: Vec<[f32; 3]> = positions.chunks_exact(3).map(|p| {
+                        let p1: Vec3 = p[0].into();
+                        let p2: Vec3 = p[1].into();
+                        let p3: Vec3 = p[2].into();
+
+                        (p2 - p1).cross(p1 - p3).into()
+                    }).flat_map(|n| [n; 3])
+                    .collect();
                 
                     let mut mesh = Mesh::new(bevy::render::render_resource::PrimitiveTopology::TriangleList);
                     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
-                    mesh.compute_flat_normals();
+                    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
                 
                     parent.spawn_bundle(PbrBundle {
                         mesh: meshes.add(mesh),
@@ -336,7 +346,6 @@ fn spawn_mesh_holder(
                 perceptual_roughness: 1.0,
                 metallic: 0.0,
                 reflectance: 0.0,
-                cull_mode: None,
                 ..Default::default()
             }),
         transform: Transform::from_translation(-Vec3::splat(0.5)).with_scale(Vec3::splat(1.0 / RES as f32)),

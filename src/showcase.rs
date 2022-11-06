@@ -1,10 +1,11 @@
-use crate::{normal_material::NormalMaterial, cube_sphere::spawn_cube_sphere};
+use crate::normal_material::NormalMaterial;
 
 use super::*;
 
-use bevy::{input::mouse::MouseMotion, render::{settings::{WgpuSettings, WgpuFeatures}, mesh::Indices, camera::CameraProjectionPlugin}, pbr::wireframe::{WireframePlugin, WireframeConfig}, log::LogSettings};
-use bevy_inspector_egui::{WorldInspectorPlugin, RegisterInspectable, Inspectable};
+
+use bevy::{input::mouse::MouseMotion, render::{settings::{WgpuSettings, WgpuFeatures}, mesh::Indices}, pbr::wireframe::{WireframePlugin, WireframeConfig}, log::LogSettings, window::WindowMode};
 use noise::{NoiseFn, Perlin, Fbm};
+use stopwatch::Stopwatch;
 
 pub const MOVE_SPEED: f32 = 30.0;
 pub const SENSITIVITY: f32 = 1.0;
@@ -18,10 +19,8 @@ pub fn start() {
         .insert_resource(Msaa { samples: 4 })
         .insert_resource(ClearColor(Color::rgb_linear(0.37, 1.0, 0.73)))
         .insert_resource(WindowDescriptor {
-            width: WIDTH,
-            height: HEIGHT,
+            mode: WindowMode::Fullscreen,
             title: "Marching Cubes".to_string(),
-            resizable: false,
             ..Default::default()
         })
         .insert_resource(LogSettings {
@@ -29,7 +28,6 @@ pub fn start() {
             ..Default::default()
         })
         .add_plugins(DefaultPlugins)
-        .add_plugin(WorldInspectorPlugin::new())
         .add_plugin(WireframePlugin)
 
         .add_plugin(MaterialPlugin::<NormalMaterial>::default())
@@ -42,12 +40,33 @@ pub fn start() {
         .add_system(update_camera)
 
         //.add_system(update_surface_nets)
+
+        .add_system(cursor_grab_system)
+
         .run();
+}
+
+
+fn cursor_grab_system(
+    mut windows: ResMut<Windows>,
+    btn: Res<Input<MouseButton>>,
+    key: Res<Input<KeyCode>>,
+) {
+    let window = windows.get_primary_mut().unwrap();
+
+    if btn.just_pressed(MouseButton::Left) {
+        window.set_cursor_lock_mode(true);
+        window.set_cursor_visibility(false);
+    }
+
+    if key.just_pressed(KeyCode::Escape) {
+        window.set_cursor_lock_mode(false);
+        window.set_cursor_visibility(true);
+    }
 }
 
 fn update_camera(
     keys: Res<Input<KeyCode>>,
-    buttons: Res<Input<MouseButton>>,
     mut motion_evr: EventReader<MouseMotion>,
     mut q_camera: Query<&mut Transform, &Camera>,
     time: Res<Time>,
@@ -78,11 +97,9 @@ fn update_camera(
         let dir = -camera_transform.right(); // negative because camera x scale is negative to create left-handed coordinate system
         camera_transform.translation += dir * delta * MOVE_SPEED;
     }
-    if buttons.pressed(MouseButton::Left) {
-        for ev in motion_evr.iter() {
-            camera_transform.rotate_local_axis(Vec3::X, -ev.delta.y * delta * SENSITIVITY);
-            camera_transform.rotate_axis(Vec3::Y, ev.delta.x * delta * SENSITIVITY);
-        }
+    for ev in motion_evr.iter() {
+        camera_transform.rotate_local_axis(Vec3::X, -ev.delta.y * delta * SENSITIVITY);
+        camera_transform.rotate_axis(Vec3::Y, ev.delta.x * delta * SENSITIVITY);
     }
 }
 
@@ -106,8 +123,6 @@ fn update_surface_nets(
             let mul = 3.7 / res;
         
             let (x, y, z) = ((i - res) * mul, (j - res) * mul, (k - res) * mul);
-        
-            //figure out how to get time into here. // yay i did it
 
             (x-2.0)*(x-2.0)*(x+2.0)*(x+2.0)
                 + (y-2.0)*(y-2.0)*(y+2.0)*(y+2.0) 
@@ -129,8 +144,8 @@ fn update_surface_nets(
 #[derive(Component)]
 struct SurfaceNets;
 
-const CHUNK_RES: usize = 8;
-const RES: usize = 32;
+const CHUNK_RES: usize = 16;
+const RES: usize = 64;
 
 fn implicit_function(i: f32, j: f32, k: f32) -> f32 {
     let mul = (128.0/17.0) / RES as f32;
@@ -181,22 +196,34 @@ pub fn marching_cubes_mesh(
             for cy in 0..CHUNK_RES {
                 for cx in 0..CHUNK_RES {
 
-                    let scalar_field = move |x: f32, y: f32, z: f32| -> f32 {
-                        let scale = 1.0 / RES as f64;
-                        noise_func.get([x as f64 * scale + cx as f64, y as f64 * scale + cy as f64, z as f64 * scale + cz as f64]) as f32
+                    let scalar_field = move |i: f32, j: f32, k: f32| -> f32 {
+                        let scale = 1.0 / RES as f32;
+                        let (x, y, z) = (
+                            (i) * scale + cx as f32 - CHUNK_RES as f32 * 0.5,
+                            (j) * scale + cy as f32 - CHUNK_RES as f32 * 0.5,
+                            (k) * scale + cz as f32 - CHUNK_RES as f32 * 0.5,
+                        );
+                        let noise = noise_func.get([x as f64, y as f64, z as f64]) as f32;
+
+                        noise
                     };
 
+                    let sw = Stopwatch::start_new();
                     let (positions, normals, indices) = marching_cubes::marching_cubes(RES, &scalar_field);
+                    println!("{} / {}: Marching cubes took: {}ms", cx + cy * CHUNK_RES + cz * CHUNK_RES * CHUNK_RES + 1, CHUNK_RES * CHUNK_RES * CHUNK_RES, sw.elapsed_ms());
     
                     let mut mesh = Mesh::new(bevy::render::render_resource::PrimitiveTopology::TriangleList);
                     mesh.set_indices(Some(Indices::U32(indices)));
                     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
                     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+
+                    let position = Vec3::new(cx as f32, cy as f32, cz as f32) * RES as f32 - Vec3::splat(0.5 * (CHUNK_RES * RES) as f32);
+                    let scale = Vec3::ONE;
     
                     builder.spawn_bundle(MaterialMeshBundle {
                         mesh: meshes.add(mesh),
                         material: materials.add(NormalMaterial{}),
-                        transform: Transform::from_translation(Vec3::new(cx as f32, cy as f32, cz as f32) * RES as f32 - Vec3::splat(0.5 * (CHUNK_RES * RES) as f32)),
+                        transform: Transform::from_translation(position).with_scale(scale),
                         ..Default::default()
                     });
                 }

@@ -1,9 +1,6 @@
 pub mod march_tables;
 
-use super::*;
-
 use bevy::{prelude::*, utils::HashMap};
-use stopwatch::Stopwatch;
 
 type ScalarField = dyn Fn(f32, f32, f32) -> f32;
 type DiscreteScalarField = dyn Fn(usize, usize, usize) -> f32;
@@ -12,8 +9,6 @@ pub fn marching_cubes(
     resolution: usize,
     scalar_field: &ScalarField,
 ) -> (Vec<[f32; 3]>, Vec<[f32; 3]>, Vec<u32>) {
-    let sw = Stopwatch::start_new();
-
     let grid_resolution = resolution + 1;
 
     let mut grid = Vec::<f32>::with_capacity(grid_resolution * grid_resolution * grid_resolution);
@@ -37,14 +32,12 @@ pub fn marching_cubes(
     for z in 0..resolution {
         for y in 0..resolution {
             for x in 0..resolution {
-                march_cube(discrete_scalar_field, (x, y, z), &mut positions, &mut indices, &mut edge_to_index, resolution);
+                march_cube(discrete_scalar_field, (x, y, z), &mut positions, &mut indices, &mut edge_to_index);
             }
         }
     }
 
     let normals = calculate_smooth_normals(&positions, &indices);
-
-    println!("Marching cubes took: {}ms", sw.elapsed_ms());
 
     (positions, normals, indices)
 }
@@ -55,7 +48,6 @@ fn march_cube(
     positions: &mut Vec<[f32; 3]>,
     indices: &mut Vec<u32>,
     edge_to_index: &mut HashMap<(usize, usize, usize), u32>,
-    resolution: usize,
 ) {
     let triangulation = get_triangulation(discrete_scalar_field, (x, y, z));
 
@@ -165,7 +157,7 @@ pub fn marching_cubes_disjointed(
         grid[x + y * grid_resolution + z * grid_resolution * grid_resolution]
     };
 
-    let mut positions_vec = Vec::new();
+    let mut meshes = Vec::new();
 
 
     for z in 0..resolution {
@@ -181,12 +173,12 @@ pub fn marching_cubes_disjointed(
                     make_vertex_interpolation(discrete_scalar_field, &mut positions, (x, y, z), edge_index as usize, 0.0);
                 }
 
-                positions_vec.push(positions);
+                meshes.push(positions);
             }
         }
     }
 
-    positions_vec
+    meshes
 }
 
 fn make_vertex_interpolation(
@@ -248,7 +240,7 @@ fn calculate_smooth_normals(
         let p2: Vec3 = positions[i2].into();
         let p3: Vec3 = positions[i3].into();
 
-        let n = (p2 - p1).cross(p3 - p1);
+        let n = (p3 - p1).cross(p2 - p1);
 
         let n1: Vec3 = normals[i1].into();
         let n2: Vec3 = normals[i2].into();
@@ -298,7 +290,7 @@ fn calculate_flat_normals(
         let p2: Vec3 = positions[i * 3 + 1].into();
         let p3: Vec3 = positions[i * 3 + 2].into();
         
-        let n = (p2 - p1).cross(p3 - p1);
+        let n = (p3 - p1).cross(p2 - p1);
 
         normals[i * 3 + 0] = n.normalize().into();
         normals[i * 3 + 1] = n.normalize().into();

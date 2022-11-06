@@ -1,9 +1,9 @@
 use super::*;
 
-use crate::{visualization_helper::*, marching_cubes::march_tables, normal_material::NormalMaterial};
+use crate::{visualization_helper::*, marching_cubes::march_tables};
 
-use bevy::{render::{mesh::Indices, render_resource::Face}, log::LogSettings, pbr::wireframe::{WireframePlugin, WireframeConfig}, window::WindowMode};
-use bevy_inspector_egui::{WorldInspectorPlugin, RegisterInspectable};
+use bevy::{render::mesh::Indices, log::LogSettings, window::WindowMode};
+use bevy_inspector_egui::WorldInspectorPlugin;
 
 use ttf2mesh::{Value, TTFFile};
 
@@ -16,8 +16,8 @@ enum TimeStage {
 }
 
 const TIMINGS: Timings = Timings {
-    timings:  [1.0, 2.0, 2.0, 3.0, 1.0],
-    delays: [5.0, 2.0, 7.0, 6.0, 1.0],
+    timings:  [1.0, 5.0, 5.0, 7.0, 1.0],
+    delays: [10.0, 2.0, 5.0, 5.0, 1.0],
 };
 
 
@@ -37,21 +37,6 @@ struct CornerNumber {
     active: bool,
 }
 
-fn scalar_field(i: f32, j: f32, k: f32) -> f32 {
-    let mul = (128.0/17.0);
-
-    let (x, y, z) = (i * mul - 4.0, j * mul - 4.0, k * mul - 4.0);
-
-    (x-2.0)*(x-2.0)*(x+2.0)*(x+2.0) + (y-2.0)*(y-2.0)*(y+2.0)*(y+2.0) + (z-2.0)*(z-2.0)*(z+2.0)*(z+2.0) + 3.0*(x*x*y*y+x*x*z*z+y*y*z*z) + 6.0*x*y*z - 10.0*(x*x+y*y+z*z) + 22.0
-}
-fn sphere(i: f32, j: f32, k: f32) -> f32 {
-    let (x, y, z) = (i - 0.5, j - 0.5, k - 0.5);
-
-    x*x + y*y + z*z - 0.2
-}
-
-const SCALAR_FIELD: &dyn Fn(f32, f32, f32) -> f32 = &sphere;
-
 pub fn start() {
     App::new()
         .insert_resource(Msaa { samples: 4 })
@@ -66,7 +51,6 @@ pub fn start() {
         })
         .add_plugins(DefaultPlugins)
         .add_plugin(WorldInspectorPlugin::new())
-        .add_plugin(WireframePlugin)
 
         .add_startup_system(spawn_camera)
         .add_system(camera_system)
@@ -118,11 +102,6 @@ fn spawn_points(
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
 
     let shared_mesh = meshes.add(mesh);
-    let shared_material = materials.add(StandardMaterial {
-        base_color: Color::DARK_GRAY, 
-        unlit: true,
-        ..Default::default()
-    });
 
     commands.spawn_bundle(
         SpatialBundle::default()
@@ -133,7 +112,11 @@ fn spawn_points(
 
             parent.spawn_bundle(MaterialMeshBundle {
                 mesh: shared_mesh.clone(),
-                material: shared_material.clone(),
+                material: materials.add(StandardMaterial {
+                    base_color: Color::DARK_GRAY, 
+                    unlit: true,
+                    ..Default::default()
+                }),
                 transform: Transform::from_translation(Vec3::new(p.0 as f32, p.1 as f32, p.2 as f32) - Vec3::splat(0.5)).with_scale(Vec3::splat(0.025)),
                 ..Default::default()
             }).insert(GridPoint { index: i })
@@ -144,19 +127,30 @@ fn spawn_points(
 }
 
 fn point_system(
-    mut points: Query<(&mut Transform, &mut Visibility, &GridPoint)>,
+    mut points: Query<(&mut Transform, &mut Visibility, &GridPoint, &Handle<StandardMaterial>)>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
     time: Res<Time>,
 ) {
     let t0 = TIMINGS.get_time_in_stage(TimeStage::CubeExpantion as usize, time.seconds_since_startup() as f32);
     let t1 = TIMINGS.get_time_in_stage(TimeStage::PointRevealing as usize, time.seconds_since_startup() as f32);
     let t2 = TIMINGS.get_time_in_stage(TimeStage::NumberReplacement as usize, time.seconds_since_startup() as f32);
 
-    let current_point = (t1 * 8.0) as usize;
-    let current_number = (t2 * 8.0) as usize;
-    for (mut transform, mut visibility, point) in points.iter_mut() {
+    let current_point = (t1 * 10.0) as usize;
+    let current_number = (t2 * 10.0) as usize;
+    for (mut transform, mut visibility, point, handle) in points.iter_mut() {
         let p = march_tables::POINTS[point.index];
         transform.translation = (Vec3::new(p.0 as f32, p.1 as f32, p.2 as f32) - Vec3::splat(0.5)) * (t0 * (2.0 - t0));
         visibility.is_visible = current_point >= point.index && current_number <= point.index;
+
+        if t1 < 1.0 {
+            let material = materials.get_mut(handle).unwrap();
+            if current_point == point.index {
+                material.base_color = Color::WHITE
+            }
+            else {
+                material.base_color = Color::DARK_GRAY
+            }
+        }
     }
 }
 
@@ -166,12 +160,6 @@ fn spawn_numbers(
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     let mut font = ttf2mesh::TTFFile::from_file("C:\\Projects\\marching_cubes\\assets\\RobotoMono-Regular.ttf").unwrap();
-
-    let shared_material = materials.add(StandardMaterial {
-        base_color: Color::DARK_GRAY,
-        unlit: true,
-        ..Default::default()
-    });
 
     commands.spawn_bundle(SpatialBundle::default())
     .insert(Name::new("Corners"))
@@ -230,7 +218,11 @@ fn spawn_numbers(
                 builder.spawn_bundle(PbrBundle {
                     mesh: meshes.add(mesh),
                     transform: Transform::from_translation(Vec3::new(p.0 as f32, p.1 as f32, p.2 as f32) - Vec3::splat(0.5)).with_scale(Vec3::splat(0.1)),
-                    material: shared_material.clone(),
+                    material: materials.add(StandardMaterial {
+                        base_color: Color::DARK_GRAY,
+                        unlit: true,
+                        ..Default::default()
+                    }),
                     ..Default::default()
                 })
                 .insert(EdgeNumber { index: i })
@@ -260,10 +252,17 @@ fn spawn_numbers(
     
                 let p = ((p1.0 + p2.0) as f32 * 0.5, (p1.1 + p2.1) as f32 * 0.5, (p1.2 + p2.2) as f32 * 0.5);
 
+                let shared_material = materials.add(StandardMaterial {
+                    base_color: Color::DARK_GRAY,
+                    unlit: true,
+                    ..Default::default()
+                });
+
                 builder.spawn_bundle(SpatialBundle {
                     transform : Transform::from_translation(Vec3::new(p.0 as f32, p.1 as f32, p.2 as f32) - Vec3::splat(0.5)).with_scale(Vec3::splat(0.1)),
                     ..Default::default()
                 })
+                .insert(shared_material.clone())
                 .insert(EdgeNumber { index: i })
                 .insert(LookAtCamera)
                 .insert(Name::new(i.to_string()))
@@ -288,26 +287,48 @@ fn spawn_numbers(
 }
 
 fn corner_number_system(
-    mut numbers: Query<(&mut Visibility, &CornerNumber)>,
+    mut numbers: Query<(&mut Visibility, &CornerNumber, &Handle<StandardMaterial>)>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
     time: Res<Time>,
 ) {
     let t = TIMINGS.get_time_in_stage(TimeStage::NumberReplacement as usize, time.seconds_since_startup() as f32);
 
-    let current = (t * 8.0) as usize;
-    for (mut visibility, number) in numbers.iter_mut() {
-        visibility.is_visible = current > number.index;
+    let current = (t * 10.0) as usize;
+    for (mut visibility, number, handle) in numbers.iter_mut() {
+        visibility.is_visible = number.index < current;
+
+        if t < 1.0 {
+            let material = materials.get_mut(handle).unwrap();
+            if current == number.index + 1 {
+                material.base_color = Color::WHITE
+            }
+            else {
+                material.base_color = Color::DARK_GRAY
+            }
+        }
     }
 }
 
 fn edge_number_system(
-    mut numbers: Query<(&mut Visibility, &EdgeNumber)>,
+    mut numbers: Query<(&mut Visibility, &EdgeNumber, &Handle<StandardMaterial>)>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
     time: Res<Time>,
 ) {
     let t = TIMINGS.get_time_in_stage(TimeStage::EdgeReplacement as usize, time.seconds_since_startup() as f32);
 
-    let current = (t * 12.0) as usize;
-    for (mut visibility, number) in numbers.iter_mut() {
+    let current = (t * 14.0) as usize;
+    for (mut visibility, number, handle) in numbers.iter_mut() {
         visibility.is_visible = current > number.index;
+
+        if t < 1.0 {
+            let material = materials.get_mut(handle).unwrap();
+            if current == number.index + 1 {
+                material.base_color = Color::WHITE
+            }
+            else {
+                material.base_color = Color::DARK_GRAY
+            }
+        }
     }
 }
 
@@ -365,14 +386,20 @@ fn spawn_mesh_holder(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
+    let mut mesh = Mesh::new(bevy::render::render_resource::PrimitiveTopology::TriangleList);
+
+    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, Vec::<[f32; 3]>::new());
+    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, Vec::<[f32; 3]>::new());
+
     commands.spawn_bundle(MaterialMeshBundle {
-        mesh: meshes.add(Mesh::new(bevy::render::render_resource::PrimitiveTopology::TriangleList)),
+        mesh: meshes.add(mesh),
         material: materials.add(StandardMaterial {
             base_color: Color::ORANGE_RED,
             emissive: Color::BLACK,
             perceptual_roughness: 1.0,
             metallic: 0.0,
             reflectance: 0.0,
+            double_sided: true,
             cull_mode: None,
             ..Default::default()
         }),
@@ -380,8 +407,13 @@ fn spawn_mesh_holder(
     }).insert(Name::new("Mesh"))
     .insert(MeshHolder {})
     .with_children(|builder| {
+        let mut mesh = Mesh::new(bevy::render::render_resource::PrimitiveTopology::LineList);
+    
+        mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, Vec::<[f32; 3]>::new());
+        mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, Vec::<[f32; 3]>::new());
+
         builder.spawn_bundle(MaterialMeshBundle {
-            mesh: meshes.add(Mesh::new(bevy::render::render_resource::PrimitiveTopology::LineList)),
+            mesh: meshes.add(mesh),
             material: materials.add(StandardMaterial {
                 base_color: Color::WHITE,
                 emissive: Color::BLACK,
@@ -437,7 +469,7 @@ fn mesh_system(
         let p2: Vec3 = positions[index * 3 + 1].into();
         let p3: Vec3 = positions[index * 3 + 2].into();
 
-        let n = (p2 - p1).cross(p3 - p1).into();
+        let n = (p3 - p1).cross(p2 - p1).into();
 
         normals.push(n);
         normals.push(n);
