@@ -3,36 +3,42 @@ pub mod march_tables;
 use bevy::{prelude::*, utils::HashMap};
 
 type ScalarField = dyn Fn(f32, f32, f32) -> f32;
-type DiscreteScalarField = dyn Fn(usize, usize, usize) -> f32;
+type VoxelGrid = dyn Fn(usize, usize, usize) -> f32;
 
 pub fn marching_cubes(
-    resolution: usize,
+    mut resolution: usize,
     scalar_field: &ScalarField,
 ) -> (Vec<[f32; 3]>, Vec<[f32; 3]>, Vec<u32>) {
-    let grid_resolution = resolution + 1;
+    resolution += 1;
 
-    let mut grid = Vec::<f32>::with_capacity(grid_resolution * grid_resolution * grid_resolution);
+    let mut voxel_grid = vec![0.0; resolution * resolution * resolution];
 
-    for z in 0..grid_resolution {
-        for y in 0..grid_resolution {
-            for x in 0..grid_resolution {
-                grid.push(scalar_field(x as f32, y as f32, z as f32));
+    for z in 0..resolution {
+        for y in 0..resolution {
+            for x in 0..resolution {
+                voxel_grid.push(scalar_field(x as f32, y as f32, z as f32));
             }
         }
     }
 
-    let discrete_scalar_field = &move |x, y, z| {
-        grid[x + y * grid_resolution + z * grid_resolution * grid_resolution]
+    let voxel_grid_wraper = &move |x, y, z| {
+        voxel_grid[x + y * resolution + z * resolution * resolution]
     };
 
     let mut positions = Vec::<[f32; 3]>::new();
     let mut indices = Vec::<u32>::new();
     let mut edge_to_index = HashMap::<(usize, usize, usize), u32>::new();
 
-    for z in 0..resolution {
-        for y in 0..resolution {
-            for x in 0..resolution {
-                march_cube(discrete_scalar_field, (x, y, z), &mut positions, &mut indices, &mut edge_to_index);
+    for z in 0..(resolution - 1) {
+        for y in 0..(resolution - 1) {
+            for x in 0..(resolution - 1) {
+                march_cube(
+                    voxel_grid_wraper, 
+                    (x, y, z), 
+                    &mut positions, 
+                    &mut indices, 
+                    &mut edge_to_index,
+                );
             }
         }
     }
@@ -43,13 +49,13 @@ pub fn marching_cubes(
 }
 
 fn march_cube(
-    discrete_scalar_field: &DiscreteScalarField,
+    voxel_grid: &VoxelGrid,
     (x, y, z): (usize, usize, usize),
     positions: &mut Vec<[f32; 3]>,
     indices: &mut Vec<u32>,
     edge_to_index: &mut HashMap<(usize, usize, usize), u32>,
 ) {
-    let triangulation = get_triangulation(discrete_scalar_field, (x, y, z));
+    let triangulation = get_triangulation(voxel_grid, (x, y, z));
 
     for edge_index in triangulation {
         if edge_index == -1 { break; }
@@ -67,8 +73,8 @@ fn march_cube(
                 let pos_a = Vec3::new((x + x0) as f32, (y + y0) as f32, (z + z0) as f32);
                 let pos_b = Vec3::new((x + x1) as f32, (y + y1) as f32, (z + z1) as f32);
             
-                let val_a = discrete_scalar_field(x + x0, y + y0, z + z0);
-                let val_b = discrete_scalar_field(x + x1, y + y1, z + z1);
+                let val_a = voxel_grid(x + x0, y + y0, z + z0);
+                let val_b = voxel_grid(x + x1, y + y1, z + z1);
             
                 let t = val_a / (val_a - val_b);
             
@@ -182,7 +188,7 @@ pub fn marching_cubes_disjointed(
 }
 
 fn make_vertex_interpolation(
-    discrete_scalar_field: &DiscreteScalarField,
+    discrete_scalar_field: &VoxelGrid,
     positions: &mut Vec<[f32; 3]>,
     (x, y, z): (usize, usize, usize),
     edge_index: usize,
@@ -209,7 +215,7 @@ fn make_vertex_interpolation(
 }
 
 fn get_triangulation(
-    discrete_scalar_field: &DiscreteScalarField,
+    discrete_scalar_field: &VoxelGrid,
     (x, y, z): (usize, usize, usize),
 ) -> [i8; 15] {
     let mut triangulation_index = 0;
