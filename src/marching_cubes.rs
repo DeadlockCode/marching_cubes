@@ -3,6 +3,7 @@ pub mod march_tables;
 use bevy::{prelude::*, utils::HashMap};
 
 type ScalarField = dyn Fn(f32, f32, f32) -> f32;
+
 type VoxelGrid = dyn Fn(usize, usize, usize) -> f32;
 
 pub fn marching_cubes(
