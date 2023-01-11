@@ -188,14 +188,17 @@ pub fn marching_cubes_mesh(
 
     let noise_func = Perlin::default();
 
-    commands.spawn_bundle(SpatialBundle {
-        ..Default::default()
-    }).insert(Name::new("World"))
-    .with_children(|builder| {
-        for cz in 0..CHUNK_RES {
-            for cy in 0..CHUNK_RES {
-                for cx in 0..CHUNK_RES {
+    use threadpool::ThreadPool;
+    use std::sync::mpsc;
 
+    let pool = ThreadPool::default();
+    let (tx, rx) = mpsc::channel::<(Mesh, Transform)>();
+
+    for cz in 0..CHUNK_RES {
+        for cy in 0..CHUNK_RES {
+            for cx in 0..CHUNK_RES {
+                let tx = tx.clone();
+                pool.execute(move || {
                     let scalar_field = move |i: f32, j: f32, k: f32| -> f32 {
                         let scale = 1.0 / RES as f32;
                         let (x, y, z) = (
@@ -204,14 +207,14 @@ pub fn marching_cubes_mesh(
                             (k) * scale + cz as f32 - CHUNK_RES as f32 * 0.5,
                         );
                         let noise = noise_func.get([x as f64, y as f64, z as f64]) as f32;
-
+    
                         noise
                     };
 
                     let sw = Stopwatch::start_new();
                     let (positions, normals, indices) = marching_cubes::marching_cubes(RES, &scalar_field);
                     println!("{} / {}: Marching cubes took: {}ms", cx + cy * CHUNK_RES + cz * CHUNK_RES * CHUNK_RES + 1, CHUNK_RES * CHUNK_RES * CHUNK_RES, sw.elapsed_ms());
-    
+
                     let mut mesh = Mesh::new(bevy::render::render_resource::PrimitiveTopology::TriangleList);
                     mesh.set_indices(Some(Indices::U32(indices)));
                     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
@@ -219,18 +222,24 @@ pub fn marching_cubes_mesh(
 
                     let position = Vec3::new(cx as f32, cy as f32, cz as f32) * RES as f32 - Vec3::splat(0.5 * (CHUNK_RES * RES) as f32);
                     let scale = Vec3::ONE;
-    
-                    builder.spawn_bundle(MaterialMeshBundle {
-                        mesh: meshes.add(mesh),
-                        material: materials.add(NormalMaterial{}),
-                        transform: Transform::from_translation(position).with_scale(scale),
-                        ..Default::default()
-                    });
-                }
+
+                    tx.send((mesh, Transform::from_translation(position).with_scale(scale))).expect("awooga");
+                });
             }
         }
+    }
+
+    commands.spawn_bundle(SpatialBundle {
+        ..Default::default()
+    }).insert(Name::new("World"))
+    .with_children(|builder| {
+        rx.iter().take(CHUNK_RES * CHUNK_RES * CHUNK_RES).for_each(|(mesh, transform)| {
+            builder.spawn_bundle(MaterialMeshBundle {
+                mesh: meshes.add(mesh),
+                material: materials.add(NormalMaterial{}),
+                transform,
+                ..Default::default()
+            });
+        })
     });
-
-
-
 }
