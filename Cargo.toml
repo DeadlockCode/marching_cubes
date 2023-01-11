@@ -15,6 +15,7 @@ opt-level = 3
 bevy = "0.8.1"
 bevy-inspector-egui = "0.13.0"
 bevy_prototype_debug_lines = { version = "0.8.1", features = ["3d"] }
+threadpool = "1.8.1"
 
 ttf2mesh = "0.2.0"
 

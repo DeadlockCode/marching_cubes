@@ -1,3 +1,6 @@
+
+// Indices to the edge array that should be added to the vertex array
+// -1 is used as a sentinel value (return/break when found).
 pub const TRIANGULATIONS: [[i8; 15]; 256] = [ 
     [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 ],
     [ 0,  8,  3, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 ],
@@ -257,6 +260,8 @@ pub const TRIANGULATIONS: [[i8; 15]; 256] = [
     [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 ],
 ];
 
+// Indices to the points array grouped such that 
+// when connected, they form the edges of a cube
 pub const EDGES: [(usize, usize); 12] = [
     (0, 1),
     (1, 2),
@@ -272,6 +277,8 @@ pub const EDGES: [(usize, usize); 12] = [
     (3, 7),
 ];
 
+// Integer offsets from a corner of a cube 
+// to all other corners, including itself
 pub const POINTS: [(usize, usize, usize); 8] = [
     (0, 0, 0),
     (0, 0, 1),
