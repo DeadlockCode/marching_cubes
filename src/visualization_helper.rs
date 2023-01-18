@@ -5,8 +5,9 @@ use crate::marching_cubes::march_tables;
 #[derive(Component)]
 pub struct LookAtCamera;
 pub struct Timings {
-    pub timings: [f32; 5],
-    pub delays: [f32; 5],
+    pub timings: Vec<f32>,
+    pub delays: Vec<f32>,
+    pub start: f32,
 }
 
 #[derive(Component)]
@@ -20,14 +21,12 @@ impl Timings {
 
         let mut offset = 0.0;
 
-        for i in 0..(stage + 1) {
+        for i in 0..stage {
             offset += self.delays[i];
-            if i != stage {
-                offset += self.timings[i];
-            }
+            offset += self.timings[i];
         }
 
-        return ((time - offset) / self.timings[stage]).clamp(0.0, 1.0);
+        return ((time - offset + self.start) / self.timings[stage]).clamp(0.0, 1.0);
     }
 }
 

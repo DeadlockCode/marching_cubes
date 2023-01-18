@@ -22,15 +22,11 @@ pub fn marching_cubes(
         }
     }
 
-    // Makes a mutable (i.e. not constant) vector of length resolution 
-    // cubed with all elements set to  0.
-    // If using a vector it is recommended to create an empty one with 
-    // a set capacity instead of initializing it to a default value,
-    // then using "vec.push(val)" to assign values instead of "vec[pos] = val"
-
     let voxel_grid = move |x, y, z| {
-        return unsafe { *voxel_grid.get_unchecked(x + y * resolution + z * resolution * resolution) };
+        return voxel_grid[x + y * resolution + z * resolution * resolution];
     };
+    
+
 
     let mut positions = Vec::<[f32; 3]>::new();
     let mut indices = Vec::<u32>::new();
@@ -40,8 +36,8 @@ pub fn marching_cubes(
         for y in 0..(resolution - 1) {
             for x in 0..(resolution - 1) {
                 march_cube(
-                    &voxel_grid, 
                     (x, y, z), 
+                    &voxel_grid, 
                     &mut positions, 
                     &mut indices, 
                     &mut edge_to_index,
@@ -56,8 +52,8 @@ pub fn marching_cubes(
 }
 
 fn march_cube(
-    voxel_grid: &VoxelGrid,
     (x, y, z): (usize, usize, usize),
+    voxel_grid: &VoxelGrid,
     positions: &mut Vec<[f32; 3]>,
     indices: &mut Vec<u32>,
     edge_to_index: &mut HashMap<(usize, usize, usize), u32>,
@@ -67,14 +63,14 @@ fn march_cube(
     for edge_index in triangulation {
         if edge_index.is_negative() { break; }
 
-        let point_index = EDGES[edge_index as usize];
+        let edge = EDGES[edge_index as usize];
 
-        let (x0, y0, z0) = POINTS[point_index.0];
-        let (x1, y1, z1) = POINTS[point_index.1];
+        let (x0, y0, z0) = POINTS[edge.0];
+        let (x1, y1, z1) = POINTS[edge.1];
     
-        let edge = (x * 2 + x0 + x1, y * 2 + y0 + y1, z * 2 + z0 + z1);
+        let edge_identifier = (x * 2 + x0 + x1, y * 2 + y0 + y1, z * 2 + z0 + z1);
     
-        match edge_to_index.get(&edge) {
+        match edge_to_index.get(&edge_identifier) {
             Some(i) => indices.push(*i),
             None => {
                 let pos_a = Vec3::new((x + x0) as f32, (y + y0) as f32, (z + z0) as f32);
@@ -84,11 +80,17 @@ fn march_cube(
                 let val_b = voxel_grid(x + x1, y + y1, z + z1);
             
                 let t = val_a / (val_a - val_b);
+
+                let position = [
+                    ((x + x0) + (x + x1)) as f32 * 0.5,
+                    ((y + y0) + (y + y1)) as f32 * 0.5,
+                    ((z + z0) + (z + z1)) as f32 * 0.5,
+                ];
             
                 let position = (pos_a + (pos_b - pos_a) * t).into();
             
                 indices.push(positions.len() as u32);
-                edge_to_index.insert(edge, positions.len() as u32);
+                edge_to_index.insert(edge_identifier, positions.len() as u32);
                 positions.push(position);
             },
         }

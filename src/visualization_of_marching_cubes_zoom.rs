@@ -15,12 +15,6 @@ enum TimeStage {
     MeshBuilding,
 }
 
-const TIMINGS: Timings = Timings {
-    timings:  [1.0, 5.0, 5.0, 7.0, 1.0],
-    delays: [10.0, 2.0, 5.0, 5.0, 1.0],
-};
-
-
 #[derive(Component)]
 struct GridPoint {
     index: usize,
@@ -39,6 +33,12 @@ struct CornerNumber {
 
 pub fn start() {
     App::new()
+        .insert_resource(Timings {
+            timings:  vec![1.0, 6.0, 6.0, 10.0, 78.0],
+            delays:     vec![1.0, 1.0, 3.0, 11.0],
+            start: -10.0
+        })
+
         .insert_resource(Msaa { samples: 4 })
         .insert_resource(ClearColor(Color::rgb_u8(20, 20, 20)))
         .insert_resource(WindowDescriptor {
@@ -81,8 +81,9 @@ pub fn start() {
 fn cube_expantion_system(
     mut boundaries: Query<&mut Transform, With<Boundary>>,
     time: Res<Time>,
+    timings: Res<Timings>,
 ) {
-    let t = TIMINGS.get_time_in_stage(TimeStage::CubeExpantion as usize, time.seconds_since_startup() as f32);
+    let t = timings.get_time_in_stage(TimeStage::CubeExpantion as usize, time.seconds_since_startup() as f32);
 
     let mut boundary = boundaries.single_mut();
 
@@ -130,10 +131,11 @@ fn point_system(
     mut points: Query<(&mut Transform, &mut Visibility, &GridPoint, &Handle<StandardMaterial>)>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     time: Res<Time>,
+    timings: Res<Timings>,
 ) {
-    let t0 = TIMINGS.get_time_in_stage(TimeStage::CubeExpantion as usize, time.seconds_since_startup() as f32);
-    let t1 = TIMINGS.get_time_in_stage(TimeStage::PointRevealing as usize, time.seconds_since_startup() as f32);
-    let t2 = TIMINGS.get_time_in_stage(TimeStage::NumberReplacement as usize, time.seconds_since_startup() as f32);
+    let t0 = timings.get_time_in_stage(TimeStage::CubeExpantion as usize, time.seconds_since_startup() as f32);
+    let t1 = timings.get_time_in_stage(TimeStage::PointRevealing as usize, time.seconds_since_startup() as f32);
+    let t2 = timings.get_time_in_stage(TimeStage::NumberReplacement as usize, time.seconds_since_startup() as f32);
 
     let current_point = (t1 * 10.0) as usize;
     let current_number = (t2 * 10.0) as usize;
@@ -290,8 +292,9 @@ fn corner_number_system(
     mut numbers: Query<(&mut Visibility, &CornerNumber, &Handle<StandardMaterial>)>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     time: Res<Time>,
+    timings: Res<Timings>,
 ) {
-    let t = TIMINGS.get_time_in_stage(TimeStage::NumberReplacement as usize, time.seconds_since_startup() as f32);
+    let t = timings.get_time_in_stage(TimeStage::NumberReplacement as usize, time.seconds_since_startup() as f32);
 
     let current = (t * 10.0) as usize;
     for (mut visibility, number, handle) in numbers.iter_mut() {
@@ -313,8 +316,9 @@ fn edge_number_system(
     mut numbers: Query<(&mut Visibility, &EdgeNumber, &Handle<StandardMaterial>)>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     time: Res<Time>,
+    timings: Res<Timings>,
 ) {
-    let t = TIMINGS.get_time_in_stage(TimeStage::EdgeReplacement as usize, time.seconds_since_startup() as f32);
+    let t = timings.get_time_in_stage(TimeStage::EdgeReplacement as usize, time.seconds_since_startup() as f32);
 
     let current = (t * 14.0) as usize;
     for (mut visibility, number, handle) in numbers.iter_mut() {
@@ -333,6 +337,35 @@ fn edge_number_system(
 }
 
 fn activate_corner_system(
+    mut numbers: Query<(&Handle<StandardMaterial>, &mut CornerNumber)>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    time: Res<Time>,
+    timings: Res<Timings>,
+) {
+    let t = timings.get_time_in_stage(TimeStage::MeshBuilding as usize, time.seconds_since_startup() as f32);
+
+    if t < 0.0 {
+        return;
+    }
+
+    let config = (t * 256.0).floor() as u8;
+
+    
+    for (material_handle, mut corner) in numbers.iter_mut() {
+        
+        corner.active = unsafe { std::mem::transmute::<u8, bool>((config >> corner.index) & 1) };
+
+        let mut material = materials.get_mut(material_handle).unwrap();
+        if corner.active {
+            material.base_color = Color::WHITE;
+        }
+        else {
+            material.base_color = Color::DARK_GRAY;
+        }
+    }
+}
+
+/*fn activate_corner_system(
     mut numbers: Query<(&Transform, &Handle<StandardMaterial>, &mut CornerNumber)>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     windows: Res<Windows>,
@@ -376,7 +409,7 @@ fn activate_corner_system(
             println!("{}", string.chars().rev().collect::<String>());
         }
     }
-}
+}*/
 
 #[derive(Component)]
 struct WireframeHolder;
@@ -539,10 +572,11 @@ fn mesh_from_char(
 fn camera_system (
     mut cameras: Query<&mut Transform, With<Camera3d>>,
     time: Res<Time>,
+    timings: Res<Timings>,
 ) {
     let mut camera = cameras.single_mut();
 
-    let t = (time.seconds_since_startup() as f32 - TIMINGS.delays[0]).max(0.0) * TAU / 90.0;
+    let t = (time.seconds_since_startup() as f32 + timings.start).max(0.0) * TAU / 90.0;
 
     camera.translation = Vec3::new(t.sin() * 2.2, 1.0, -t.cos() * 2.2);
     camera.look_at(Vec3::new(0.0, -0.15, 0.0), Vec3::Y);
