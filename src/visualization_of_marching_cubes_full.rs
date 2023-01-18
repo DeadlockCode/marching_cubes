@@ -2,7 +2,7 @@ use crate::marching_cubes::march_tables;
 
 use super::*;
 
-use bevy::{render::mesh::Indices, log::LogSettings, window::WindowMode};
+use bevy::{render::{mesh::Indices, once_cell::sync::Lazy}, log::LogSettings, window::WindowMode};
 use bevy_inspector_egui::{WorldInspectorPlugin, Inspectable, RegisterInspectable};
 
 use crate::visualization_helper::*;
@@ -16,11 +16,6 @@ enum TimeStage {
     InterpolateMesh,
     NormalizeMesh,
 }
-
-const TIMINGS: Timings = Timings {
-    timings:  [10.0, 2.0, 30.0, 2.0, 0.5],
-    delays: [5.0, 5.0, 2.0, 2.0, 5.0],
-};
 
 #[derive(Component)]
 struct GridPoint {
@@ -66,6 +61,12 @@ const SCALAR_FIELD: &dyn Fn(f32, f32, f32) -> f32 = &sphere;
 
 pub fn start() {
     App::new()
+        .insert_resource(Timings {
+            timings:  vec![10.0, 4.0, 124.0, 2.0, 0.5],
+            delays:     vec![85.0, 12.0, 60.0, 5.0],
+            start: -20.0
+        })
+
         .insert_resource(Msaa { samples: 4 })
         .insert_resource(ClearColor(Color::rgb_u8(20, 20, 20)))
         .insert_resource(WindowDescriptor {
@@ -211,9 +212,10 @@ fn spawn_grid_points(
 fn isolevel_system(
     mut isosurfaces: Query<&mut Isosurface>,
     time: Res<Time>,
+    timings: Res<Timings>,
 ) {
-    let t0 = TIMINGS.get_time_in_stage(TimeStage::SkimGridPoints as usize, time.seconds_since_startup() as f32);
-    let t1 = TIMINGS.get_time_in_stage(TimeStage::InterpolateMesh as usize, time.seconds_since_startup() as f32);
+    let t0 = timings.get_time_in_stage(TimeStage::SkimGridPoints as usize, time.seconds_since_startup() as f32);
+    let t1 = timings.get_time_in_stage(TimeStage::InterpolateMesh as usize, time.seconds_since_startup() as f32);
 
     let mut isosurface = isosurfaces.single_mut();
 
@@ -229,9 +231,10 @@ fn grid_point_system(
     mut grid_points: Query<(&mut Visibility, &GridPoint)>,
     isosurfaces: Query<&Isosurface>,
     time: Res<Time>,
+    timings: Res<Timings>,
 ) {
     let isosurface = isosurfaces.single();
-    let t = TIMINGS.get_time_in_stage(TimeStage::ShowGridPoints as usize, time.seconds_since_startup() as f32);
+    let t = timings.get_time_in_stage(TimeStage::ShowGridPoints as usize, time.seconds_since_startup() as f32);
 
     for (mut visibility, grid_point) in grid_points.iter_mut() {
         let value = SCALAR_FIELD(grid_point.x as f32, grid_point.y as f32, grid_point.z as f32) / isosurface.max_value;
@@ -305,9 +308,10 @@ fn grid_mesh_system(
     mut grid_meshes: Query<(&mut Visibility, &GridMesh), Without<Highlight>>,
     mut mesh_highlight: Query<(&mut Transform, &mut Visibility), With<Highlight>>,
     time: Res<Time>,
+    timings: Res<Timings>,
 ) {
-    let t0 = TIMINGS.get_time_in_stage(TimeStage::ShowGridMeshes as usize, time.seconds_since_startup() as f32);
-    let t1 = TIMINGS.get_time_in_stage(TimeStage::InterpolateMesh as usize, time.seconds_since_startup() as f32);
+    let t0 = timings.get_time_in_stage(TimeStage::ShowGridMeshes as usize, time.seconds_since_startup() as f32);
+    let t1 = timings.get_time_in_stage(TimeStage::InterpolateMesh as usize, time.seconds_since_startup() as f32);
 
     let (mut highlight_transform, mut highlight_visibility) = mesh_highlight.single_mut();
 
@@ -357,11 +361,12 @@ fn spawn_mesh_holder(
 
 fn interpolate_mesh_system(
     mut meshes: ResMut<Assets<Mesh>>,
+    mut mesh_holders: Query<(&mut Visibility, &Handle<Mesh>), With<MeshHolder>>,
     time: Res<Time>,
-    mut mesh_holders: Query<(&mut Visibility, &Handle<Mesh>), With<MeshHolder>>
+    timings: Res<Timings>,
 ) {
-    let t0 = TIMINGS.get_time_in_stage(TimeStage::InterpolateMesh as usize, time.seconds_since_startup() as f32);
-    let t1 = TIMINGS.get_time_in_stage(TimeStage::NormalizeMesh as usize, time.seconds_since_startup() as f32);
+    let t0 = timings.get_time_in_stage(TimeStage::InterpolateMesh as usize, time.seconds_since_startup() as f32);
+    let t1 = timings.get_time_in_stage(TimeStage::NormalizeMesh as usize, time.seconds_since_startup() as f32);
 
     let (positions, normals) = 
         marching_cubes::marching_cubes_interpolation(
@@ -386,10 +391,11 @@ fn interpolate_mesh_system(
 fn camera_system (
     mut cameras: Query<&mut Transform, With<Camera3d>>,
     time: Res<Time>,
+    timings: Res<Timings>,
 ) {
+    let t = (time.seconds_since_startup() as f32 + timings.start) * TAU / 60.0;
+    
     let mut camera = cameras.single_mut();
-
-    let t = (time.seconds_since_startup() as f32 - TIMINGS.delays[0]) * TAU / 60.0;
 
     camera.translation = Vec3::new(-t.sin() * 2.2, 1.0, t.cos() * 2.2);
     camera.look_at(Vec3::new(0.0, -0.15, 0.0), Vec3::Y);
