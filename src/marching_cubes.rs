@@ -1,10 +1,32 @@
 pub mod march_tables;
+
 use march_tables::{POINTS, EDGES, TRIANGULATIONS};
 
 use bevy::{prelude::*, utils::HashMap};
 
 type ScalarField = dyn Fn(f32, f32, f32) -> f32;
-type VoxelGrid = dyn Fn(usize, usize, usize) -> f32;
+
+struct VoxelGrid {
+    data: Vec<f32>,
+    resolution: usize,
+}
+
+impl VoxelGrid {
+    fn new(resolution: usize) -> Self {
+        Self { 
+            data: Vec::with_capacity(resolution * resolution * resolution),
+            resolution,
+        }
+    }
+
+    fn read(&self, x: usize, y: usize, z: usize) -> f32 {
+        self.data[x + y * self.resolution + z * self.resolution * self.resolution]
+    }
+
+    fn push(&mut self, value: f32) {
+        self.data.push(value);
+    }
+}
 
 pub fn marching_cubes(
     mut resolution: usize,
@@ -12,7 +34,7 @@ pub fn marching_cubes(
 ) -> (Vec<[f32; 3]>, Vec<[f32; 3]>, Vec<u32>) {
     resolution += 1; // Cube-res to Grid-res.
 
-    let mut voxel_grid = Vec::with_capacity(resolution * resolution * resolution);
+    let mut voxel_grid = VoxelGrid::new(resolution);
 
     for z in 0..resolution {
         for y in 0..resolution {
@@ -21,13 +43,7 @@ pub fn marching_cubes(
             }
         }
     }
-
-    let voxel_grid = move |x, y, z| {
-        return voxel_grid[x + y * resolution + z * resolution * resolution];
-    };
     
-
-
     let mut positions = Vec::<[f32; 3]>::new();
     let mut indices = Vec::<u32>::new();
     let mut edge_to_index = HashMap::<(usize, usize, usize), u32>::new();
@@ -58,7 +74,7 @@ fn march_cube(
     indices: &mut Vec<u32>,
     edge_to_index: &mut HashMap<(usize, usize, usize), u32>,
 ) {
-    let triangulation = get_triangulation(voxel_grid, (x, y, z));
+    let triangulation = get_triangulation((x, y, z), voxel_grid);
 
     for edge_index in triangulation {
         if edge_index.is_negative() { break; }
@@ -76,16 +92,10 @@ fn march_cube(
                 let pos_a = Vec3::new((x + x0) as f32, (y + y0) as f32, (z + z0) as f32);
                 let pos_b = Vec3::new((x + x1) as f32, (y + y1) as f32, (z + z1) as f32);
             
-                let val_a = voxel_grid(x + x0, y + y0, z + z0);
-                let val_b = voxel_grid(x + x1, y + y1, z + z1);
+                let val_a = voxel_grid.read(x + x0, y + y0, z + z0);
+                let val_b = voxel_grid.read(x + x1, y + y1, z + z1);
             
                 let t = val_a / (val_a - val_b);
-
-                let position = [
-                    ((x + x0) + (x + x1)) as f32 * 0.5,
-                    ((y + y0) + (y + y1)) as f32 * 0.5,
-                    ((z + z0) + (z + z1)) as f32 * 0.5,
-                ];
             
                 let position = (pos_a + (pos_b - pos_a) * t).into();
             
@@ -98,40 +108,35 @@ fn march_cube(
 }
 
 pub fn marching_cubes_interpolation(
-    resolution: usize,
+    mut resolution: usize,
     scalar_field: &ScalarField,
     interpolate: f32,
     normal_weight: f32,
-) -> (Vec<[f32; 3]>, Vec<[f32; 3]>){
+) -> (Vec<[f32; 3]>, Vec<[f32; 3]>) {
+    resolution += 1;
 
-    let grid_resolution = resolution + 1;
-
-    let mut grid = Vec::<f32>::with_capacity(grid_resolution * grid_resolution * grid_resolution);
-
-    for z in 0..grid_resolution {
-        for y in 0..grid_resolution {
-            for x in 0..grid_resolution {
-                grid.push(scalar_field(x as f32, y as f32, z as f32));
-            }
-        }
-    }
-
-    let voxel_grid = &move |x, y, z| {
-        grid[x + y * grid_resolution + z * grid_resolution * grid_resolution]
-    };
-
-    let mut positions = Vec::<[f32; 3]>::new();
+    let mut voxel_grid = VoxelGrid::new(resolution);
 
     for z in 0..resolution {
         for y in 0..resolution {
             for x in 0..resolution {
+                voxel_grid.push(scalar_field(x as f32, y as f32, z as f32));
+            }
+        }
+    }
+
+    let mut positions = Vec::<[f32; 3]>::new();
+
+    for z in 0..(resolution - 1) {
+        for y in 0..(resolution - 1) {
+            for x in 0..(resolution - 1) {
                 
-                let triangulation = get_triangulation(voxel_grid, (x, y, z));
+                let triangulation = get_triangulation((x, y, z), &voxel_grid);
 
                 for edge_index in triangulation {
                     if edge_index == -1 { break; }
 
-                    make_vertex_interpolation(voxel_grid, &mut positions, (x, y, z), edge_index as usize, interpolate);
+                    make_vertex_interpolation((x, y, z), &voxel_grid, &mut positions, edge_index as usize, interpolate);
                 }
             }
         }
@@ -153,39 +158,34 @@ pub fn marching_cubes_interpolation(
 }
 
 pub fn marching_cubes_disjointed(
-    resolution: usize,
+    mut resolution: usize,
     scalar_field: &ScalarField,
 ) -> Vec<Vec<[f32; 3]>> {
-    let grid_resolution = resolution + 1;
+    resolution += 1;
 
-    let mut grid = Vec::<f32>::with_capacity(grid_resolution * grid_resolution * grid_resolution);
-
-    for z in 0..grid_resolution {
-        for y in 0..grid_resolution {
-            for x in 0..grid_resolution {
-                grid.push(scalar_field(x as f32, y as f32, z as f32));
-            }
-        }
-    }
-
-    let voxel_grid = &move |x, y, z| {
-        grid[x + y * grid_resolution + z * grid_resolution * grid_resolution]
-    };
-
-    let mut meshes = Vec::new();
-
+    let mut voxel_grid = VoxelGrid::new(resolution);
 
     for z in 0..resolution {
         for y in 0..resolution {
             for x in 0..resolution {
+                voxel_grid.push(scalar_field(x as f32, y as f32, z as f32));
+            }
+        }
+    }
+
+    let mut meshes = Vec::new();
+
+    for z in 0..(resolution - 1) {
+        for y in 0..(resolution - 1) {
+            for x in 0..(resolution - 1) {
                 let mut positions = Vec::<[f32; 3]>::new();
                 
-                let triangulation = get_triangulation(voxel_grid, (x, y, z));
+                let triangulation = get_triangulation((x, y, z), &voxel_grid);
 
                 for edge_index in triangulation {
                     if edge_index == -1 { break; }
 
-                    make_vertex_interpolation(voxel_grid, &mut positions, (x, y, z), edge_index as usize, 0.0);
+                    make_vertex_interpolation((x, y, z), &voxel_grid, &mut positions, edge_index as usize, 0.0);
                 }
 
                 meshes.push(positions);
@@ -197,9 +197,9 @@ pub fn marching_cubes_disjointed(
 }
 
 fn make_vertex_interpolation(
+    (x, y, z): (usize, usize, usize),
     voxel_grid: &VoxelGrid,
     positions: &mut Vec<[f32; 3]>,
-    (x, y, z): (usize, usize, usize),
     edge_index: usize,
     interpolate: f32,
 ) {
@@ -211,8 +211,8 @@ fn make_vertex_interpolation(
     let pos_a: Vec3 = Vec3::new((x + x0) as f32, (y + y0) as f32, (z + z0) as f32);
     let pos_b: Vec3 = Vec3::new((x + x1) as f32, (y + y1) as f32, (z + z1) as f32);
 
-    let val_a = voxel_grid(pos_a.x as usize, pos_a.y as usize, pos_a.z as usize);
-    let val_b = voxel_grid(pos_b.x as usize, pos_b.y as usize, pos_b.z as usize);
+    let val_a = voxel_grid.read(pos_a.x as usize, pos_a.y as usize, pos_a.z as usize);
+    let val_b = voxel_grid.read(pos_b.x as usize, pos_b.y as usize, pos_b.z as usize);
 
     let t = val_a / (val_a - val_b);
 
@@ -224,19 +224,19 @@ fn make_vertex_interpolation(
 }
 
 fn get_triangulation(
-    voxel_grid: &VoxelGrid,
     (x, y, z): (usize, usize, usize),
+    voxel_grid: &VoxelGrid,
 ) -> [i8; 15] {
     let mut config_idx = 0b00000000;
 
-    config_idx |= (voxel_grid(  x  ,  y  ,  z  ).is_sign_negative() as u8) << 0;
-    config_idx |= (voxel_grid(  x  ,  y  ,z + 1).is_sign_negative() as u8) << 1;
-    config_idx |= (voxel_grid(x + 1,  y  ,z + 1).is_sign_negative() as u8) << 2;
-    config_idx |= (voxel_grid(x + 1,  y  ,  z  ).is_sign_negative() as u8) << 3;
-    config_idx |= (voxel_grid(  x  ,y + 1,  z  ).is_sign_negative() as u8) << 4;
-    config_idx |= (voxel_grid(  x  ,y + 1,z + 1).is_sign_negative() as u8) << 5;
-    config_idx |= (voxel_grid(x + 1,y + 1,z + 1).is_sign_negative() as u8) << 6;
-    config_idx |= (voxel_grid(x + 1,y + 1,  z  ).is_sign_negative() as u8) << 7;
+    config_idx |= (voxel_grid.read(  x  ,  y  ,  z  ).is_sign_negative() as u8) << 0;
+    config_idx |= (voxel_grid.read(  x  ,  y  ,z + 1).is_sign_negative() as u8) << 1;
+    config_idx |= (voxel_grid.read(x + 1,  y  ,z + 1).is_sign_negative() as u8) << 2;
+    config_idx |= (voxel_grid.read(x + 1,  y  ,  z  ).is_sign_negative() as u8) << 3;
+    config_idx |= (voxel_grid.read(  x  ,y + 1,  z  ).is_sign_negative() as u8) << 4;
+    config_idx |= (voxel_grid.read(  x  ,y + 1,z + 1).is_sign_negative() as u8) << 5;
+    config_idx |= (voxel_grid.read(x + 1,y + 1,z + 1).is_sign_negative() as u8) << 6;
+    config_idx |= (voxel_grid.read(x + 1,y + 1,  z  ).is_sign_negative() as u8) << 7;
     
     TRIANGULATIONS[config_idx as usize]
 }
