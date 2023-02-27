@@ -7,6 +7,7 @@ use bevy::{input::mouse::MouseMotion, render::{settings::{WgpuSettings, WgpuFeat
 use noise::{NoiseFn, Perlin, Fbm};
 use stopwatch::Stopwatch;
 
+
 pub const MOVE_SPEED: f32 = 30.0;
 pub const SENSITIVITY: f32 = 1.0;
 
